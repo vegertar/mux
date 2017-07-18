@@ -63,7 +63,7 @@ func newMultiHandler(handler ...interface{}) MultiHandler {
 }
 
 func newHandlerFromLabel(label x.Label) http.Handler {
-	var h http.Handler = http.NotFoundHandler()
+	h := http.NotFoundHandler()
 	if len(label.Handler) != 0 {
 		h = newMultiHandler(label.Handler...)
 	}

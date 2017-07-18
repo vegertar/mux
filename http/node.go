@@ -6,26 +6,35 @@ import (
 	"github.com/vegertar/mux/x"
 )
 
+// Node uses trie tree to store and search literal labeled route components,
+// but for glob patterned route components, which are arranged into an array, this means,
+// persisting tons of glob labeled route components into a node isn't recommended.
+// Specially, a route component with '*' or '**' and which are the only glob symbols,
+// this route component is able to place into trie tree.
 type Node struct {
 	labels []*x.Label
 	tree   *radix.Tree
 	up     *x.Label
 }
 
+// NewNode creates a node instance.
 func NewNode() *Node {
 	return &Node{
 		tree: radix.New(),
 	}
 }
 
+// Up implements the `x.Node` interface.
 func (p *Node) Up() *x.Label {
 	return p.up
 }
 
+// Empty implements the `x.Node` interface.
 func (p *Node) Empty() bool {
 	return len(p.labels) == 0 && p.tree.Len() == 0
 }
 
+// Delete implements the `x.Node` interface.
 func (p *Node) Delete(label *x.Label) {
 	if label.Glob == nil {
 		p.tree.Delete(label.String())
@@ -43,6 +52,7 @@ func (p *Node) Delete(label *x.Label) {
 	}
 }
 
+// Make implements the `x.Node` interface.
 func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 	node := p
 	for _, s := range route {
@@ -66,8 +76,6 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 
 			leaf.Node = node
 			if leaf.Glob != nil {
-				// TODO: adjusts the insertion algorithm
-
 				var group1, group2, group3 []*x.Label
 				for _, l := range node.labels {
 					if leaf.Match(l.String()) {
@@ -89,6 +97,7 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 	return leaf, nil
 }
 
+// Get implements the `x.Node` interface.
 func (p *Node) Get(route x.Route) *x.Label {
 	var leaf *x.Label
 
@@ -111,6 +120,7 @@ func (p *Node) Get(route x.Route) *x.Label {
 	return leaf
 }
 
+// Match implements the `x.Node` interface.
 func (p *Node) Match(route x.Route) x.Label {
 	var leaf x.Label
 	leaf.Node = p
@@ -166,6 +176,7 @@ func (p *Node) Match(route x.Route) x.Label {
 	return leaf
 }
 
+// Leaves implements the `x.Node` interface.
 func (p *Node) Leaves() []*x.Label {
 	var out []*x.Label
 	p.tree.Walk(func(s string, v interface{}) bool {
@@ -186,28 +197,6 @@ func (p *Node) Leaves() []*x.Label {
 	}
 
 	return out
-}
-
-func (p *Node) walk(depth int, f func(int, *x.Label)) {
-	var next []*Node
-	p.tree.Walk(func(s string, v interface{}) bool {
-		label := v.(*x.Label)
-		f(depth, label)
-		if label.Down != nil {
-			next = append(next, label.Down.(*Node))
-		}
-		return false
-	})
-	for _, label := range p.labels {
-		f(depth, label)
-		if label.Down != nil {
-			next = append(next, label.Down.(*Node))
-		}
-	}
-
-	for _, node := range next {
-		node.walk(depth+1, f)
-	}
 }
 
 func (p *Node) find(s string) *x.Label {

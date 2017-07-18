@@ -13,8 +13,7 @@ type Node interface {
 	// Leaves returns all labels has nil `Down` node.
 	Leaves() []*Label
 
-	// Get returns a leaf label matched given route as exactly as possible.
-	// Which means the returned leaf has a nil `Down` node, and it must be within the longest route matching path.
+	// Get returns a leaf label matched given route exactly.
 	Get(Route) *Label
 
 	// Up returns a parent label.

@@ -72,17 +72,3 @@ func (r Route) Strings() []string {
 
 	return out
 }
-
-// Path is a helper function creating a route from a path.
-func Path(s string) Route {
-	return Route{
-		Path: s,
-	}
-}
-
-// PathPrefix is a helper function creating a route from a path prefix.
-func PathPrefix(s string) Route {
-	return Route{
-		Path: path.Join(s, "*"),
-	}
-}
