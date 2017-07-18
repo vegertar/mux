@@ -6,11 +6,7 @@ import (
 	"github.com/vegertar/mux/x"
 )
 
-// Node uses trie tree to store and search literal labeled route components,
-// but for glob patterned route components, which are arranged into an array, this means,
-// persisting tons of glob labeled route components into a node isn't recommended.
-// Specially, a route component with '*' or '**' and which are the only glob symbols,
-// this route component is able to place into trie tree.
+// Node uses trie tree to store and search labeled route components.
 type Node struct {
 	labels []*x.Label
 	tree   *radix.Tree

@@ -1,99 +1,9 @@
 package radix
 
-import (
-	"sort"
-	"strings"
-)
-
 // WalkFn is used when walking the tree. Takes a
 // key and value, returning if iteration should
 // be terminated.
 type WalkFn func(s string, v interface{}) bool
-
-// leaf is used to represent a value
-type leaf struct {
-	key []Label
-	val interface{}
-}
-
-// edge is used to represent an edge node
-type edge struct {
-	label Label
-	node  *node
-}
-
-type node struct {
-	// leaf is used to store possible leaf
-	leaf *leaf
-
-	// prefix is the common prefix we ignore
-	prefix []Label
-
-	// Edges should be stored in-order for iteration.
-	// We avoid a fully materialized slice to save memory,
-	// since in most cases we expect to be sparse
-	edges edges
-}
-
-func (n *node) isLeaf() bool {
-	return n.leaf != nil
-}
-
-func (n *node) addEdge(e edge) {
-	n.edges = append(n.edges, e)
-	n.edges.Sort()
-}
-
-func (n *node) replaceEdge(e edge) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label.Compare(e.label) >= 0
-	})
-	if idx < num && n.edges[idx].label.Compare(e.label) == 0 {
-		n.edges[idx].node = e.node
-		return
-	}
-	panic("replacing missing edge")
-}
-
-func (n *node) getEdge(label Label) *node {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label.Compare(label) >= 0
-	})
-	if idx < num && n.edges[idx].label.Compare(label) == 0 {
-		return n.edges[idx].node
-	}
-	return nil
-}
-
-func (n *node) delEdge(label Label) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label.Compare(label) >= 0
-	})
-	if idx < num && n.edges[idx].label.Compare(label) == 0 {
-		n.edges = append(n.edges[idx:], n.edges[idx+1:]...)
-	}
-}
-
-type edges []edge
-
-func (e edges) Len() int {
-	return len(e)
-}
-
-func (e edges) Less(i, j int) bool {
-	return e[i].label.Compare(e[j].label) < 0
-}
-
-func (e edges) Swap(i, j int) {
-	e[i], e[j] = e[j], e[i]
-}
-
-func (e edges) Sort() {
-	sort.Sort(e)
-}
 
 // Tree implements a radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over
@@ -125,7 +35,7 @@ func longestPrefix(k1, k2 []Label) int {
 	}
 	var i int
 	for i = 0; i < max; i++ {
-		if k1[i].Compare(k2[i]) != 0 {
+		if k1[i].Compare(k2[i].Bytes()) != 0 {
 			break
 		}
 	}
@@ -229,7 +139,7 @@ func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 // value and if it was deleted
 func (t *Tree) Delete(s []Label) (interface{}, bool) {
 	var parent *node
-	var label byte
+	var label Label
 	n := t.root
 	search := s
 	for {
@@ -280,14 +190,6 @@ DELETE:
 	}
 
 	return leaf.val, true
-}
-
-func (n *node) mergeChild() {
-	e := n.edges[0]
-	child := e.node
-	n.prefix = n.prefix + child.prefix
-	n.leaf = child.leaf
-	n.edges = child.edges
 }
 
 // Get is used to lookup a specific key, returning
@@ -411,10 +313,9 @@ func (t *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
 		}
 
 		// Consume the search prefix
-		if strings.HasPrefix(search, n.prefix) {
+		if commonPrefix := longestPrefix(search, n.prefix); commonPrefix == len(n.prefix) {
 			search = search[len(n.prefix):]
-
-		} else if strings.HasPrefix(n.prefix, search) {
+		} else if commonPrefix == len(search) {
 			// Child may be under our search prefix
 			recursiveWalk(n, fn)
 			return
@@ -422,14 +323,13 @@ func (t *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
 			break
 		}
 	}
-
 }
 
 // WalkPath is used to walk the tree, but only visiting nodes
 // from the root down to a given leaf. Where WalkPrefix walks
 // all the entries *under* the given prefix, this walks the
 // entries *above* the given prefix.
-func (t *Tree) WalkPath(path string, fn WalkFn) {
+func (t *Tree) WalkPath(path []Label, fn WalkFn) {
 	n := t.root
 	search := path
 	for {
@@ -450,8 +350,8 @@ func (t *Tree) WalkPath(path string, fn WalkFn) {
 		}
 
 		// Consume the search prefix
-		if strings.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
+		if commonPrefix := longestPrefix(search, n.prefix); commonPrefix == len(n.prefix) {
+			search = search[commonPrefix:]
 		} else {
 			break
 		}
