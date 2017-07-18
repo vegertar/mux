@@ -19,12 +19,20 @@ type ResponseWriter struct {
 
 // Write implements the `http.ResponseWriter` interface.
 func (p *ResponseWriter) Write(b []byte) (int, error) {
+	if p.Written() {
+		return 0, ErrResponseWritten
+	}
+
 	defer atomic.StoreInt32(&p.written, 1)
 	return p.ResponseWriter.Write(b)
 }
 
 // WriteHeader implements the `http.ResponseWriter` interface.
 func (p *ResponseWriter) WriteHeader(code int) {
+	if p.Written() {
+		return
+	}
+
 	defer atomic.StoreInt32(&p.written, 1)
 	p.ResponseWriter.WriteHeader(code)
 }
@@ -48,9 +56,6 @@ func (m MultiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for _, h := range m {
 		h.ServeHTTP(writer, r)
-		if writer.Written() {
-			panic(ErrResponseWritten)
-		}
 	}
 }
 
