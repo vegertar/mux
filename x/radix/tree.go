@@ -3,7 +3,7 @@ package radix
 // WalkFn is used when walking the tree. Takes a
 // key and value, returning if iteration should
 // be terminated.
-type WalkFn func(s string, v interface{}) bool
+type WalkFn func(s []Label, v interface{}) bool
 
 // Tree implements a radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over
@@ -22,8 +22,8 @@ func New() *Tree {
 }
 
 // Len is used to return the number of elements in the tree
-func (t *Tree) Len() int {
-	return t.size
+func (p *Tree) Len() int {
+	return p.size
 }
 
 // longestPrefix finds the length of the shared prefix
@@ -44,9 +44,9 @@ func longestPrefix(k1, k2 []Label) int {
 
 // Insert is used to add a new entry or update
 // an existing entry. Returns if updated.
-func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
+func (p *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 	var parent *node
-	n := t.root
+	n := p.root
 	search := s
 	for {
 		// Handle key exhaution
@@ -61,7 +61,7 @@ func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 				key: s,
 				val: v,
 			}
-			t.size++
+			p.size++
 			return nil, false
 		}
 
@@ -82,7 +82,7 @@ func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 				},
 			}
 			parent.addEdge(e)
-			t.size++
+			p.size++
 			return nil, false
 		}
 
@@ -94,7 +94,7 @@ func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 		}
 
 		// Split the node
-		t.size++
+		p.size++
 		child := &node{
 			prefix: search[:commonPrefix],
 		}
@@ -137,10 +137,10 @@ func (t *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 
 // Delete is used to delete a key, returning the previous
 // value and if it was deleted
-func (t *Tree) Delete(s []Label) (interface{}, bool) {
+func (p *Tree) Delete(s []Label) (interface{}, bool) {
 	var parent *node
 	var label Label
-	n := t.root
+	n := p.root
 	search := s
 	for {
 		// Check for key exhaution
@@ -172,7 +172,7 @@ DELETE:
 	// Delete the leaf
 	leaf := n.leaf
 	n.leaf = nil
-	t.size--
+	p.size--
 
 	// Check if we should delete this node from the parent
 	if parent != nil && len(n.edges) == 0 {
@@ -180,12 +180,12 @@ DELETE:
 	}
 
 	// Check if we should merge this node
-	if n != t.root && len(n.edges) == 1 {
+	if n != p.root && len(n.edges) == 1 {
 		n.mergeChild()
 	}
 
 	// Check if we should merge the parent's other child
-	if parent != nil && parent != t.root && len(parent.edges) == 1 && !parent.isLeaf() {
+	if parent != nil && parent != p.root && len(parent.edges) == 1 && !parent.isLeaf() {
 		parent.mergeChild()
 	}
 
@@ -194,8 +194,8 @@ DELETE:
 
 // Get is used to lookup a specific key, returning
 // the value and if it was found
-func (t *Tree) Get(s []Label) (interface{}, bool) {
-	n := t.root
+func (p *Tree) Get(s []Label) (interface{}, bool) {
+	n := p.root
 	search := s
 	for {
 		// Check for key exhaution
@@ -224,9 +224,9 @@ func (t *Tree) Get(s []Label) (interface{}, bool) {
 
 // LongestPrefix is like Get, but instead of an
 // exact match, it will return the longest prefix match.
-func (t *Tree) LongestPrefix(s []Label) ([]Label, interface{}, bool) {
+func (p *Tree) LongestPrefix(s []Label) ([]Label, interface{}, bool) {
 	var last *leaf
-	n := t.root
+	n := p.root
 	search := s
 	for {
 		// Look for a leaf node
@@ -259,8 +259,8 @@ func (t *Tree) LongestPrefix(s []Label) ([]Label, interface{}, bool) {
 }
 
 // Minimum is used to return the minimum value in the tree
-func (t *Tree) Minimum() ([]Label, interface{}, bool) {
-	n := t.root
+func (p *Tree) Minimum() ([]Label, interface{}, bool) {
+	n := p.root
 	for {
 		if n.isLeaf() {
 			return n.leaf.key, n.leaf.val, true
@@ -275,8 +275,8 @@ func (t *Tree) Minimum() ([]Label, interface{}, bool) {
 }
 
 // Maximum is used to return the maximum value in the tree
-func (t *Tree) Maximum() ([]Label, interface{}, bool) {
-	n := t.root
+func (p *Tree) Maximum() ([]Label, interface{}, bool) {
+	n := p.root
 	for {
 		if num := len(n.edges); num > 0 {
 			n = n.edges[num-1].node
@@ -291,13 +291,13 @@ func (t *Tree) Maximum() ([]Label, interface{}, bool) {
 }
 
 // Walk is used to walk the tree
-func (t *Tree) Walk(fn WalkFn) {
-	recursiveWalk(t.root, fn)
+func (p *Tree) Walk(fn WalkFn) {
+	recursiveWalk(p.root, fn)
 }
 
 // WalkPrefix is used to walk the tree under a prefix
-func (t *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
-	n := t.root
+func (p *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
+	n := p.root
 	search := prefix
 	for {
 		// Check for key exhaution
@@ -329,8 +329,8 @@ func (t *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
 // from the root down to a given leaf. Where WalkPrefix walks
 // all the entries *under* the given prefix, this walks the
 // entries *above* the given prefix.
-func (t *Tree) WalkPath(path []Label, fn WalkFn) {
-	n := t.root
+func (p *Tree) WalkPath(path []Label, fn WalkFn) {
+	n := p.root
 	search := path
 	for {
 		// Visit the leaf values if any
