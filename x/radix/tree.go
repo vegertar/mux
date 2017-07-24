@@ -46,7 +46,7 @@ func longestPrefix(k1, k2 []Label) int {
 // an existing entry. Returns if updated.
 func (p *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 	var parent *node
-	n := p.root
+	i, n := -1, p.root
 	search := s
 	for {
 		// Handle key exhaution
@@ -67,7 +67,7 @@ func (p *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 
 		// Look for the edge
 		parent = n
-		n = n.getEdge(search[0])
+		i, n = n.getEdge(search[0])
 
 		// No edge, create one
 		if n == nil {
@@ -98,10 +98,7 @@ func (p *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 		child := &node{
 			prefix: search[:commonPrefix],
 		}
-		parent.replaceEdge(edge{
-			label: search[0],
-			node:  child,
-		})
+		parent.replaceEdge(i, child)
 
 		// Restore the existing node
 		child.addEdge(edge{
@@ -140,7 +137,7 @@ func (p *Tree) Insert(s []Label, v interface{}) (interface{}, bool) {
 func (p *Tree) Delete(s []Label) (interface{}, bool) {
 	var parent *node
 	var label Label
-	n := p.root
+	i, n := -1, p.root
 	search := s
 	for {
 		// Check for key exhaution
@@ -154,7 +151,7 @@ func (p *Tree) Delete(s []Label) (interface{}, bool) {
 		// Look for an edge
 		parent = n
 		label = search[0]
-		n = n.getEdge(label)
+		i, n = n.getEdge(label)
 		if n == nil {
 			break
 		}
@@ -176,7 +173,7 @@ DELETE:
 
 	// Check if we should delete this node from the parent
 	if parent != nil && len(n.edges) == 0 {
-		parent.delEdge(label)
+		parent.delEdge(i)
 	}
 
 	// Check if we should merge this node
@@ -207,7 +204,7 @@ func (p *Tree) Get(s []Label) (interface{}, bool) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -240,7 +237,7 @@ func (p *Tree) LongestPrefix(s []Label) ([]Label, interface{}, bool) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -307,7 +304,7 @@ func (p *Tree) WalkPrefix(prefix []Label, fn WalkFn) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			break
 		}
@@ -344,7 +341,7 @@ func (p *Tree) WalkPath(path []Label, fn WalkFn) {
 		}
 
 		// Look for an edge
-		n = n.getEdge(search[0])
+		_, n = n.getEdge(search[0])
 		if n == nil {
 			return
 		}

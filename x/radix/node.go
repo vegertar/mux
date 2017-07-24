@@ -28,25 +28,19 @@ func (p *node) addEdge(e edge) {
 	p.edges.Sort()
 }
 
-func (p *node) replaceEdge(e edge) {
-	if i := p.edges.Search(e.label); i != -1 {
-		p.edges[i].node = e.node
-		return
-	}
-	panic("replacing missing edge")
+func (p *node) replaceEdge(i int, n *node) {
+	p.edges[i].node = n
 }
 
-func (p *node) getEdge(label Label) *node {
+func (p *node) getEdge(label Label) (int, *node) {
 	if i := p.edges.Search(label); i != -1 {
-		return p.edges[i].node
+		return i, p.edges[i].node
 	}
-	return nil
+	return -1, nil
 }
 
-func (p *node) delEdge(label Label) {
-	if i := p.edges.Search(label); i != -1 {
-		p.edges = append(p.edges[i:], p.edges[i+1:]...)
-	}
+func (p *node) delEdge(i int) {
+	p.edges = append(p.edges[:i], p.edges[i+1:]...)
 }
 
 func (p *node) mergeChild() {
