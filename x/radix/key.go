@@ -109,7 +109,7 @@ func (k Key) StringWith(separator string) string {
 
 // Strings returns string slice representation.
 func (k Key) Strings() []string {
-	s := make([]string, 0, len(self))
+	s := make([]string, 0, len(k))
 	for _, t := range k {
 		s = append(s, t.String())
 	}

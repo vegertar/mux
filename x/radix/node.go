@@ -59,61 +59,6 @@ func insertionSort(data sort.Interface, a, b int) {
 	}
 }
 
-type component struct {
-	literalEdges   []edge
-	patternedEdges []edge
-}
-
-func (p *component) addEdge(e edge) {
-	if e.label.Literal() {
-		p.literalEdges = append(p.literalEdges, e)
-		sort.Sort(sortEdgeByLiteral(p.literalEdges))
-	} else {
-		p.patternedEdges = append(p.patternedEdges, e)
-		sort.Sort(sortEdgeByLiteral(p.patternedEdges))
-	}
-}
-
-func (p *component) delEdge(l Label) {
-	s := l.String()
-	if l.Literal() {
-		x := sortEdgeByLiteral(p.literalEdges)
-		i := sort.Search(len(x), func(i int) bool {
-			return x[i].label.String() >= s
-		})
-		if i < len(x) && x[i].label.String() == s {
-			p.literalEdges = append(p.literalEdges[:i], p.literalEdges[i+1:]...)
-		}
-	} else {
-		x := sortEdgeByLiteral(p.patternedEdges)
-		i := sort.Search(len(x), func(i int) bool {
-			return x[i].label.String() >= s
-		})
-		if i < len(x) && x[i].label.String() == s {
-			p.patternedEdges = append(p.patternedEdges[:i], p.patternedEdges[i+1:]...)
-		}
-	}
-}
-
-func (p *component) search(s string) []edge {
-	var found []edge
-	if len(p.literalEdges) > 0 {
-		x := sortEdgeByLiteral(p.literalEdges)
-		i := sort.Search(len(x), func(i int) bool {
-			return x[i].label.String() >= s
-		})
-		if i < len(x) && x[i].label.String() == s {
-			found = append(found, x[i])
-		}
-	}
-	for _, e := range p.patternedEdges {
-		if e.label.Match(s) {
-			found = append(found, e)
-		}
-	}
-	return found
-}
-
 type node struct {
 	// leaf is used to store possible leaf
 	leaf *leaf
@@ -124,19 +69,66 @@ type node struct {
 	// Edges should be stored in-order for iteration.
 	// We avoid a fully materialized slice to save memory,
 	// since in most cases we expect to be sparse
-	edges component
+	edges struct {
+		literalEdges   []edge
+		patternedEdges []edge
+	}
 }
 
 func (p *node) isLeaf() bool {
 	return p.leaf != nil
 }
 
-//
-//func (p *node) addEdge(e edge) {
-//	// since sort immediately after every adding, we use insertion sort here
-//
-//}
-//
+func (p *node) addEdge(e edge) {
+	if e.label.Literal() {
+		p.edges.literalEdges = append(p.edges.literalEdges, e)
+		sort.Sort(sortEdgeByLiteral(p.edges.literalEdges))
+	} else {
+		p.edges.patternedEdges = append(p.edges.patternedEdges, e)
+		sort.Sort(sortEdgeByLiteral(p.edges.patternedEdges))
+	}
+}
+
+func (p *node) delEdge(l Label) {
+	s := l.String()
+	if l.Literal() {
+		x := sortEdgeByLiteral(p.edges.literalEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i+1:]...)
+		}
+	} else {
+		x := sortEdgeByLiteral(p.edges.patternedEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i+1:]...)
+		}
+	}
+}
+
+func (p *node) search(s string) []edge {
+	var found []edge
+	if len(p.edges.literalEdges) > 0 {
+		x := sortEdgeByLiteral(p.edges.literalEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			found = append(found, x[i])
+		}
+	}
+	for _, e := range p.edges.patternedEdges {
+		if e.label.Match(s) {
+			found = append(found, e)
+		}
+	}
+	return found
+}
+
 //func (p *node) replaceEdge(i int, n *node) {
 //	p.edges[i].node = n
 //}
@@ -146,10 +138,6 @@ func (p *node) isLeaf() bool {
 //		return i, p.edges[i].node
 //	}
 //	return -1, nil
-//}
-//
-//func (p *node) delEdge(i int) {
-//	p.edges = append(p.edges[:i], p.edges[i+1:]...)
 //}
 //
 //func (p *node) mergeChild() {
