@@ -2,7 +2,6 @@ package radix
 
 import (
 	"sort"
-	"fmt"
 )
 
 // leaf is used to represent a value
@@ -17,69 +16,26 @@ type edge struct {
 	node  *node
 }
 
-type edges []edge
+type sortEdgeByLiteral []edge
 
-func (self edges) Len() int {
-	return len(self)
-}
+func (e sortEdgeByLiteral) Len() int { return len(e) }
 
-func (self edges) Less(i, j int) bool {
-	return lessLabel(self[i].label, self[j].label)
-}
+func (e sortEdgeByLiteral) Less(i, j int) bool { return e[i].label.String() < e[j].label.String() }
 
-func (self edges) Swap(i, j int) {
-	self[i], self[j] = self[j], self[i]
-}
+func (e sortEdgeByLiteral) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
-func (self edges) Search(l Label) []int {
-	n := len(self)
+type sortEdgeByPattern []edge
 
-	start := sort.Search(n, func(i int) bool {
-		return !lessLabel(self[i].label, l)
-	})
-	end := n
-	s := l.String()
+func (e sortEdgeByPattern) Len() int { return len(e) }
 
-	if start < n {
-		i := sort.Search(n - start, func(i int) bool {
-			return lessLabel(l, self[i].label)
-		})
-		if start + i < n {
-			end = start + i
+func (e sortEdgeByPattern) Less(i, j int) bool { return lessLabelByPattern(e[i].label, e[j].label) }
 
-			for ; end < n; end++ {
-				if !self[end].label.Match(s) {
-					break
-				}
-			}
-		}
-	}
-	fmt.Println(">>>", start, end)
+func (e sortEdgeByPattern) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
-	var found []int
-	for i := start; i < end; i++ {
-		if self[i].label.Match(s) {
-			found = append(found, i)
-		}
-	}
-	//if len(found) > 0 && end < n {
-	//	rest := self[end:].Search(l)
-	//	for _, i := range rest {
-	//		found = append(found, end + i)
-	//	}
-	//}
-
-	return found
-}
-
-func (self edges) Sort() {
-	insertionSort(self, 0, self.Len())
-}
-
-func lessLabel(x, y Label) bool {
+func lessLabelByPattern(x, y Label) bool {
 	a, b := x.String(), y.String()
-	if a == b {
-		return false
+	if x.Literal() && y.Literal() {
+		return a < b
 	}
 
 	if y.Match(a) {
@@ -97,15 +53,70 @@ func lessLabel(x, y Label) bool {
 
 func insertionSort(data sort.Interface, a, b int) {
 	for i := a + 1; i < b; i++ {
-		for j := i; j > a && data.Less(j, j - 1); j-- {
-			data.Swap(j, j - 1)
+		for j := i; j > a && data.Less(j, j-1); j-- {
+			data.Swap(j, j-1)
 		}
 	}
 }
 
+type component struct {
+	literalEdges   []edge
+	patternedEdges []edge
+}
+
+func (p *component) addEdge(e edge) {
+	if e.label.Literal() {
+		p.literalEdges = append(p.literalEdges, e)
+		sort.Sort(sortEdgeByLiteral(p.literalEdges))
+	} else {
+		p.patternedEdges = append(p.patternedEdges, e)
+		sort.Sort(sortEdgeByLiteral(p.patternedEdges))
+	}
+}
+
+func (p *component) delEdge(l Label) {
+	s := l.String()
+	if l.Literal() {
+		x := sortEdgeByLiteral(p.literalEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			p.literalEdges = append(p.literalEdges[:i], p.literalEdges[i+1:]...)
+		}
+	} else {
+		x := sortEdgeByLiteral(p.patternedEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			p.patternedEdges = append(p.patternedEdges[:i], p.patternedEdges[i+1:]...)
+		}
+	}
+}
+
+func (p *component) search(s string) []edge {
+	var found []edge
+	if len(p.literalEdges) > 0 {
+		x := sortEdgeByLiteral(p.literalEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			found = append(found, x[i])
+		}
+	}
+	for _, e := range p.patternedEdges {
+		if e.label.Match(s) {
+			found = append(found, e)
+		}
+	}
+	return found
+}
+
 type node struct {
 	// leaf is used to store possible leaf
-	leaf   *leaf
+	leaf *leaf
 
 	// prefix is the common prefix we ignore
 	prefix Key
@@ -113,12 +124,13 @@ type node struct {
 	// Edges should be stored in-order for iteration.
 	// We avoid a fully materialized slice to save memory,
 	// since in most cases we expect to be sparse
-	edges  edges
+	edges component
 }
 
 func (p *node) isLeaf() bool {
 	return p.leaf != nil
 }
+
 //
 //func (p *node) addEdge(e edge) {
 //	// since sort immediately after every adding, we use insertion sort here

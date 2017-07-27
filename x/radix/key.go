@@ -12,24 +12,31 @@ type Label interface {
 	Match(other string) bool
 	// String returns the string representation.
 	String() string
+	// Literal returns if this label contains string literal only.
+	Literal() bool
 }
 
-// StringLabel is the label based on literal string.
+// StringLabel is the label based on string literal.
 type StringLabel string
 
 // Match implements the `Label` interface.
-func (self StringLabel) Match(other string) bool {
-	return string(self) == other
+func (s StringLabel) Match(other string) bool {
+	return string(s) == other
 }
 
 // String implements the `Label` interface.
-func (self StringLabel) String() string {
-	return string(self)
+func (s StringLabel) String() string {
+	return string(s)
+}
+
+// Literal implements the `Label` interface.
+func (s StringLabel) Literal() bool {
+	return true
 }
 
 // GlobLabel is the label supposed to be matched by asterisk (*).
 type GlobLabel struct {
-	s        string
+	s     string
 	parts []string
 }
 
@@ -77,6 +84,12 @@ func (p *GlobLabel) Match(subj string) bool {
 	return trailingGlob || strings.HasSuffix(subj, p.parts[end])
 }
 
+// Literal implements the `Label` interface.
+func (p *GlobLabel) Literal() bool {
+	return false
+}
+
+// NewGlobLabel creates a glob patterned label which can use '*' to match any string.
 func NewGlobLabel(s string) *GlobLabel {
 	return &GlobLabel{s: s, parts: strings.Split(s, glob)}
 }
@@ -85,19 +98,19 @@ func NewGlobLabel(s string) *GlobLabel {
 type Key []Label
 
 // String returns the string representation, which equals to StringWith("").
-func (self Key) String() string {
-	return strings.Join(self.Strings(), "")
+func (k Key) String() string {
+	return strings.Join(k.Strings(), "")
 }
 
 // StringWith returns a string joined with the given separator.
-func (self Key) StringWith(separator string) string {
-	return strings.Join(self.Strings(), separator)
+func (k Key) StringWith(separator string) string {
+	return strings.Join(k.Strings(), separator)
 }
 
 // Strings returns string slice representation.
-func (self Key) Strings() []string {
+func (k Key) Strings() []string {
 	s := make([]string, 0, len(self))
-	for _, t := range self {
+	for _, t := range k {
 		s = append(s, t.String())
 	}
 	return s
@@ -108,12 +121,12 @@ func NewCharKey(s string) Key {
 	return NewStringKey(s, "")
 }
 
-// NewStringKey creates a literal string key from a string with a separator.
+// NewStringKey creates a string literal key with a separator.
 func NewStringKey(s, separator string) Key {
 	return NewStringSliceKey(strings.Split(s, separator))
 }
 
-// NewStringKey creates a literal key from a string slice.
+// NewStringSliceKey creates a key from a string literal slice.
 func NewStringSliceKey(v []string) Key {
 	labels := make([]Label, 0, len(v))
 	for _, s := range v {

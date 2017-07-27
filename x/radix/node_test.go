@@ -1,8 +1,8 @@
 package radix
 
 import (
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func stringLabel(s string) Label {
@@ -82,6 +82,11 @@ func TestEdges_Sort(t *testing.T) {
 			[]string{"x", "*x", "x*", "*x*", "**", "*"},
 			globLabel,
 		},
+		{
+			[]string{"x", "y", "z", "xx*", "y*", "*", "x*y"},
+			[]string{"x", "xx*", "x*y", "y", "y*", "z", "*"},
+			globLabel,
+		},
 	}
 
 	for i, c := range cases {
@@ -95,7 +100,7 @@ func TestEdges_Sort(t *testing.T) {
 			z = append(z, v.label.String())
 		}
 		if !reflect.DeepEqual(z, c.y) {
-			t.Fatalf("bad case %v: expected %v, got %v", i + 1, c.y, z)
+			t.Fatalf("bad case %v: expected %v, got %v", i+1, c.y, z)
 		}
 	}
 }
@@ -182,11 +187,11 @@ func TestEdges_Search(t *testing.T) {
 			z = append(z, v.label.String())
 		}
 		if !reflect.DeepEqual(z, c.x) {
-			t.Fatalf("bad case %v: expected %v, got %v", i + 1, c.x, z)
+			t.Fatalf("bad case %v: expected %v, got %v", i+1, c.x, z)
 		}
 		found := e.Search(c.fn(c.y))
 		if !reflect.DeepEqual(found, c.found) {
-			t.Fatalf("bad case %v, expected %v, got %v", i + 1, c.found, found)
+			t.Fatalf("bad case %v, expected %v, got %v", i+1, c.found, found)
 		}
 	}
 }
