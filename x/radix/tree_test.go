@@ -1,59 +1,32 @@
 package radix
 
-//import (
-//	"math/rand"
+import (
+	"math/rand"
 //	"reflect"
 //	"sort"
 //	"testing"
-//)
-//
-//func randomByteLabel() Label {
-//	return StringLabel(randomString(1))
-//}
-//
-//func randomString(n int) string {
-//	b := make([]byte, 0, n)
-//	for i := 0; i < n; i++ {
-//		b = append(b, byte(rand.Intn(26)+65))
-//	}
-//	return string(b)
-//}
-//
-//func randomStringSlice(size, unit int) []string {
-//	values := make([]string, 0, size)
-//	for i := 0; i < size; i++ {
-//		values = append(values, randomString(unit))
-//	}
-//	return values
-//}
-//
-//func TestEdges_Search(t *testing.T) {
-//	const n = 100
-//	values := randomStringSlice(n, 10)
-//	if len(values) != n {
-//		t.Fatalf("expected %d random strings, got %d", n, len(values))
-//	}
-//
-//	var e edges
-//	for _, s := range values {
-//		e = append(e, edge{
-//			label: StringLabel(s),
-//		})
-//	}
-//
-//	e.Sort()
-//	sort.Strings(values)
-//
-//	for i := range rand.Perm(len(values)) {
-//		s := values[i]
-//		a := sort.SearchStrings(values, s)
-//		b := e.Search(StringLabel(s))
-//
-//		if a != b {
-//			t.Fatalf("search %s expected %d, got %d", s, a, b)
-//		}
-//	}
-//}
+)
+
+func randomByteLabel() Label {
+	return StringLabel(randomString(1))
+}
+
+func randomString(n int) string {
+	b := make([]byte, 0, n)
+	for i := 0; i < n; i++ {
+		b = append(b, byte(rand.Intn(26)+65))
+	}
+	return string(b)
+}
+
+func randomStringSlice(size, unit int) []string {
+	values := make([]string, 0, size)
+	for i := 0; i < size; i++ {
+		values = append(values, randomString(unit))
+	}
+	return values
+}
+
 //
 //func TestTree(t *testing.T) {
 //	var min, max string

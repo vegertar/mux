@@ -5,10 +5,18 @@ import (
 )
 
 // leaf is used to represent a value
-type leaf struct {
-	key Key
-	val interface{}
+type Leaf struct {
+	Key   Key
+	Value interface{}
 }
+
+type sortLeafByPattern []*Leaf
+
+func (l sortLeafByPattern) Len() int { return len(l) }
+
+func (l sortLeafByPattern) Less(i, j int) bool { return lessKey(l[i].Key, l[j].Key) }
+
+func (l sortLeafByPattern) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
 
 // edge is used to represent an edge node
 type edge struct {
@@ -28,11 +36,11 @@ type sortEdgeByPattern []edge
 
 func (e sortEdgeByPattern) Len() int { return len(e) }
 
-func (e sortEdgeByPattern) Less(i, j int) bool { return lessLabelByPattern(e[i].label, e[j].label) }
+func (e sortEdgeByPattern) Less(i, j int) bool { return lessLabel(e[i].label, e[j].label) }
 
 func (e sortEdgeByPattern) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
-func lessLabelByPattern(x, y Label) bool {
+func lessLabel(x, y Label) bool {
 	a, b := x.String(), y.String()
 	if x.Literal() && y.Literal() {
 		return a < b
@@ -51,6 +59,31 @@ func lessLabelByPattern(x, y Label) bool {
 	return a < b
 }
 
+func lessKey(x, y Key) bool {
+	commonPrefix := longestPrefix(x, y)
+	if commonPrefix < len(x) && commonPrefix < len(y) {
+		return lessLabel(x[commonPrefix], y[commonPrefix])
+	}
+	if commonPrefix == len(x) && commonPrefix < len(y) {
+		return true
+	}
+	return false
+}
+
+func longestPrefix(x, y Key) int {
+	max := len(x)
+	if l := len(y); l < max {
+		max = l
+	}
+	var i int
+	for i = 0; i < max; i++ {
+		if x[i].String() != y[i].String() {
+			break
+		}
+	}
+	return i
+}
+
 func insertionSort(data sort.Interface, a, b int) {
 	for i := a + 1; i < b; i++ {
 		for j := i; j > a && data.Less(j, j-1); j-- {
@@ -61,18 +94,20 @@ func insertionSort(data sort.Interface, a, b int) {
 
 type node struct {
 	// leaf is used to store possible leaf
-	leaf *leaf
+	leaf *Leaf
 
 	// prefix is the common prefix we ignore
 	prefix Key
 
-	// Edges should be stored in-order for iteration.
-	// We avoid a fully materialized slice to save memory,
-	// since in most cases we expect to be sparse
+	// edges should be stored in-order for iteration and searching.
 	edges struct {
 		literalEdges   []edge
 		patternedEdges []edge
 	}
+}
+
+func (p *node) size() int {
+	return len(p.edges.literalEdges) + len(p.edges.patternedEdges)
 }
 
 func (p *node) isLeaf() bool {
@@ -110,7 +145,34 @@ func (p *node) delEdge(l Label) {
 	}
 }
 
-func (p *node) search(s string) []edge {
+func (p *node) getEdge(l Label) *edge {
+	s := l.String()
+	if len(p.edges.literalEdges) > 0 {
+		x := sortEdgeByLiteral(p.edges.literalEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			return &x[i]
+		}
+	}
+
+	if len(p.edges.patternedEdges) > 0 {
+		x := sortEdgeByLiteral(p.edges.patternedEdges)
+		i := sort.Search(len(x), func(i int) bool {
+			return x[i].label.String() >= s
+		})
+		if i < len(x) && x[i].label.String() == s {
+			return &x[i]
+		}
+	}
+
+	return nil
+}
+
+func (p *node) search(l Label) []edge {
+	s := l.String()
+
 	var found []edge
 	if len(p.edges.literalEdges) > 0 {
 		x := sortEdgeByLiteral(p.edges.literalEdges)
@@ -129,20 +191,19 @@ func (p *node) search(s string) []edge {
 	return found
 }
 
-//func (p *node) replaceEdge(i int, n *node) {
-//	p.edges[i].node = n
-//}
-//
-//func (p *node) getEdge(label Label) (int, *node) {
-//	if i := p.edges.Search(label); i != -1 {
-//		return i, p.edges[i].node
-//	}
-//	return -1, nil
-//}
-//
-//func (p *node) mergeChild() {
-//	child := p.edges[0].node
-//	p.prefix = append(p.prefix, child.prefix...)
-//	p.leaf = child.leaf
-//	p.edges = child.edges
-//}
+func (p *node) mergeChild() {
+	if p.size() != 1 {
+		panic("required total size 1")
+	}
+
+	var child *node
+	if len(p.edges.literalEdges) == 1 {
+		child = p.edges.literalEdges[0].node
+	} else {
+		child = p.edges.patternedEdges[0].node
+	}
+
+	p.prefix = append(p.prefix, child.prefix...)
+	p.leaf = child.leaf
+	p.edges = child.edges
+}

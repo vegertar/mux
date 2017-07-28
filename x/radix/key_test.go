@@ -1,11 +1,14 @@
 package radix
 
-import "testing"
+import (
+	"testing"
+	"reflect"
+)
 
 func TestGlobLabel_Match(t *testing.T) {
 	type exp struct {
 		pattern, s string
-		matched bool
+		matched    bool
 	}
 
 	cases := []exp{
@@ -30,7 +33,26 @@ func TestGlobLabel_Match(t *testing.T) {
 	for _, c := range cases {
 		label := NewGlobLabel(c.pattern)
 		if label.Match(c.s) != c.matched {
-			t.Fatalf("bad case: %v", c)
+			t.Errorf("bad case: %v", c)
+		}
+	}
+}
+
+func TestNewCharKey(t *testing.T) {
+	type exp struct {
+		x string
+		y []string
+	}
+
+	cases := []exp{
+		{"", nil},
+		{"xyz", []string{"x", "y", "z"}},
+		{"你好, China", []string{"你", "好", ",", " ", "C", "h", "i", "n", "a"}},
+	}
+	for i, c := range cases {
+		y := NewCharKey(c.x).Strings()
+		if !reflect.DeepEqual(y, c.y) {
+			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
 		}
 	}
 }

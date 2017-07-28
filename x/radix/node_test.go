@@ -1,8 +1,9 @@
 package radix
 
 import (
-	"reflect"
 	"testing"
+	"sort"
+	"reflect"
 )
 
 func stringLabel(s string) Label {
@@ -13,7 +14,7 @@ func globLabel(s string) Label {
 	return NewGlobLabel(s)
 }
 
-func TestEdges_Less(t *testing.T) {
+func TestLessLabel(t *testing.T) {
 	type exp struct {
 		x, y string
 		ok   bool
@@ -41,157 +42,92 @@ func TestEdges_Less(t *testing.T) {
 		{"x*", "x", false, globLabel},
 	}
 
-	for _, c := range cases {
-		var e edges
-		e = append(e, edge{label: c.fn(c.x)}, edge{label: c.fn(c.y)})
-		if e.Less(0, 1) != c.ok {
-			t.Fatal("bad case:", e)
+	for i, c := range cases {
+		x, y := c.fn(c.x), c.fn(c.y)
+		if lessLabel(x, y) != c.ok {
+			t.Errorf("bad case %v: %v", i + 1, c)
 		}
 	}
 }
 
-func TestEdges_Sort(t *testing.T) {
+func TestLessKey(t *testing.T) {
 	type exp struct {
 		x, y []string
-		fn   func(string) Label
+		ok   bool
+		fn   func([]string) Key
 	}
 
 	cases := []exp{
-		{
-			[]string{"x", "*", "x*", "*x", "**"},
-			[]string{"*", "**", "*x", "x", "x*"},
-			stringLabel,
-		},
-		{
-			[]string{"x", "*", "x*", "*x", "**"},
-			[]string{"x", "*x", "x*", "*", "**"},
-			globLabel,
-		},
-		{
-			[]string{"x", "**", "x*", "*x", "*"},
-			[]string{"x", "*x", "x*", "**", "*"},
-			globLabel,
-		},
-		{
-			[]string{"x", "**", "*x*", "*x", "*"},
-			[]string{"x", "*x", "*x*", "**", "*"},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x*", "**", "x*", "*x", "*"},
-			[]string{"x", "*x", "x*", "*x*", "**", "*"},
-			globLabel,
-		},
-		{
-			[]string{"x", "y", "z", "xx*", "y*", "*", "x*y"},
-			[]string{"x", "xx*", "x*y", "y", "y*", "z", "*"},
-			globLabel,
-		},
+		{[]string{"x"}, []string{"x"}, false, NewStringSliceKey},
+		{[]string{"x"}, []string{"x"}, false, NewGlobSliceKey},
+		{[]string{"x"}, []string{"y"}, true, NewStringSliceKey},
+		{[]string{"x"}, []string{"y"}, true, NewGlobSliceKey},
+		{[]string{"y"}, []string{"x"}, false, NewStringSliceKey},
+		{[]string{"y"}, []string{"x"}, false, NewGlobSliceKey},
+		{[]string{"x"}, []string{"*"}, false, NewStringSliceKey},
+		{[]string{"x"}, []string{"*"}, true, NewGlobSliceKey},
+		{[]string{"*"}, []string{"x"}, true, NewStringSliceKey},
+		{[]string{"*"}, []string{"x"}, false, NewGlobSliceKey},
+		{[]string{"*"}, []string{"*"}, false, NewStringSliceKey},
+		{[]string{"*"}, []string{"*"}, false, NewGlobSliceKey},
+		{[]string{"x"}, []string{"x*"}, true, NewStringSliceKey},
+		{[]string{"x"}, []string{"x*"}, true, NewGlobSliceKey},
+		{[]string{"x"}, []string{"*x"}, false, NewStringSliceKey},
+		{[]string{"x"}, []string{"*x"}, true, NewGlobSliceKey},
+		{[]string{"x*"}, []string{"x"}, false, NewStringSliceKey},
+		{[]string{"x*"}, []string{"x"}, false, NewGlobSliceKey},
 	}
 
 	for i, c := range cases {
-		var e edges
-		for _, z := range c.x {
-			e = append(e, edge{label: c.fn(z)})
-			e.Sort()
-		}
-		z := make([]string, 0, e.Len())
-		for _, v := range e {
-			z = append(z, v.label.String())
-		}
-		if !reflect.DeepEqual(z, c.y) {
-			t.Fatalf("bad case %v: expected %v, got %v", i+1, c.y, z)
+		x, y := c.fn(c.x), c.fn(c.y)
+		if lessKey(x, y) != c.ok {
+			t.Errorf("bad case %v: %v", i + 1, c)
 		}
 	}
 }
 
-func TestEdges_Search(t *testing.T) {
-	type exp struct {
-		x     []string
-		y     string
-		found []int
-		fn    func(string) Label
+func TestNode_Search(t *testing.T) {
+	input := []struct {
+		x  string
+		fn func(string) Label
+	}{
+		{"/v1/x", stringLabel},
+		{"/v2/x", stringLabel},
+		{"/v*/x", globLabel},
+		{"/v3/*", globLabel},
 	}
 
-	cases := []exp{
-		{
-			[]string{"*", "**", "*x", "x", "x*"},
-			"x",
-			[]int{3},
-			stringLabel,
-		},
-		{
-			[]string{"x", "*x", "x*", "*", "**"},
-			"x",
-			[]int{0, 1, 2, 3, 4},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "x*", "**", "*"},
-			"xy",
-			[]int{2, 3, 4},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "*x*", "**", "*"},
-			"y",
-			[]int{3, 4},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "x*", "*x*", "**", "*"},
-			"yx",
-			[]int{1, 3, 4, 5},
-			globLabel,
-		},
-		{
-			[]string{"xy", "x*", "yx", "*x*", "z", "*z"},
-			"x",
-			[]int{1, 3},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "xy", "x*", "yx", "*x*", "z", "*z"},
-			"x",
-			[]int{0, 1, 3, 5},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "xy", "x*", "yx", "*x*", "z", "*z"},
-			"y",
-			nil,
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "xy", "x*", "yx", "*x*", "z", "*z"},
-			"xy",
-			[]int{2, 3, 5},
-			globLabel,
-		},
-		{
-			[]string{"x", "*x", "xy", "x*", "yx", "*x*", "z", "*z"},
-			"yx",
-			[]int{4, 5},
-			globLabel,
-		},
+	n := new(node)
+	for _, c := range input {
+		n.addEdge(edge{
+			label: c.fn(c.x),
+		})
 	}
 
-	for i, c := range cases {
-		var e edges
-		for _, z := range c.x {
-			e = append(e, edge{label: c.fn(z)})
-			e.Sort()
+	output := []struct{
+		x string
+		y []string
+	}{
+		{"/v1", nil},
+		{"/v3", nil},
+		{"/v3/", []string{"/v3/*"}},
+		{"/v3/x", []string{"/v*/x", "/v3/*"}},
+		{"/v1/x", []string{"/v1/x", "/v*/x"}},
+		{"/v2/x", []string{"/v2/x", "/v*/x"}},
+	}
+
+	for i, c := range output {
+		edges := n.search(stringLabel(c.x))
+		sort.Sort(sortEdgeByPattern(edges))
+
+		var l []Label
+		for _, e := range edges {
+			l = append(l, e.label)
 		}
-		z := make([]string, 0, e.Len())
-		for _, v := range e {
-			z = append(z, v.label.String())
-		}
-		if !reflect.DeepEqual(z, c.x) {
-			t.Fatalf("bad case %v: expected %v, got %v", i+1, c.x, z)
-		}
-		found := e.Search(c.fn(c.y))
-		if !reflect.DeepEqual(found, c.found) {
-			t.Fatalf("bad case %v, expected %v, got %v", i+1, c.found, found)
+
+		y := Key(l).Strings()
+		if !reflect.DeepEqual(y, c.y) {
+			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
 		}
 	}
 }

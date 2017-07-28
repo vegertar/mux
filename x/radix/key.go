@@ -97,11 +97,6 @@ func NewGlobLabel(s string) *GlobLabel {
 // Key is the key to insert, delete, and search a tree.
 type Key []Label
 
-// String returns the string representation, which equals to StringWith("").
-func (k Key) String() string {
-	return strings.Join(k.Strings(), "")
-}
-
 // StringWith returns a string joined with the given separator.
 func (k Key) StringWith(separator string) string {
 	return strings.Join(k.Strings(), separator)
@@ -109,6 +104,10 @@ func (k Key) StringWith(separator string) string {
 
 // Strings returns string slice representation.
 func (k Key) Strings() []string {
+	if len(k) == 0 {
+		return nil
+	}
+
 	s := make([]string, 0, len(k))
 	for _, t := range k {
 		s = append(s, t.String())
@@ -118,7 +117,20 @@ func (k Key) Strings() []string {
 
 // NewCharKey creates a general character sequenced key.
 func NewCharKey(s string) Key {
-	return NewStringKey(s, "")
+	var (
+		last = -1
+		v []string
+	)
+	for i := range s {
+		if last != -1 {
+			v = append(v, s[last:i])
+		}
+		last = i
+	}
+	if last != -1 {
+		v = append(v, s[last:])
+	}
+	return NewStringSliceKey(v)
 }
 
 // NewStringKey creates a string literal key with a separator.
