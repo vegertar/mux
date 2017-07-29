@@ -55,6 +55,9 @@ func (m MultiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, h := range m {
+		if writer.Written() {
+			break
+		}
 		h.ServeHTTP(writer, r)
 	}
 }

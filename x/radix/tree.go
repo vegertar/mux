@@ -1,11 +1,13 @@
 package radix
 
-import "sort"
+import (
+	"sort"
+)
 
 // WalkFn is used when walking the tree. Takes a
 // leaf, returning if iteration should
 // be terminated.
-type WalkFn func(leaf *Leaf) bool
+type WalkFn func(leaf Leaf) bool
 
 // Tree implements a radix tree. This can be treated as a
 // Dictionary abstract data type. The main advantage over
@@ -28,7 +30,6 @@ func (p *Tree) Len() int {
 	return p.size
 }
 
-
 // Insert is used to add a new entry or update
 // an existing entry. Returns if updated.
 func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
@@ -44,7 +45,7 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 			}
 
 			n.leaf = &Leaf{
-				Key: k,
+				Key:   k,
 				Value: v,
 			}
 			p.size++
@@ -61,7 +62,7 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 				label: search[0],
 				node: &node{
 					leaf: &Leaf{
-						Key: k,
+						Key:   k,
 						Value: v,
 					},
 					prefix: search,
@@ -95,7 +96,7 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 
 		// Create a new leaf node
 		leaf := &Leaf{
-			Key: k,
+			Key:   k,
 			Value: v,
 		}
 
@@ -123,9 +124,9 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 func (p *Tree) Delete(k Key) (interface{}, bool) {
 	var (
 		parent *node
-		label Label
+		label  Label
 
-		n = p.root
+		n      = p.root
 		search = k
 	)
 
@@ -177,45 +178,125 @@ func (p *Tree) Delete(k Key) (interface{}, bool) {
 	return nil, false
 }
 
+// DeletePrefix is used to delete the subtree under a prefix
+// Returns how many nodes were deleted
+// Use this to delete large subtrees efficiently
+func (p *Tree) DeletePrefix(prefix Key) int {
+	return p.deletePrefix(nil, p.root, prefix)
+}
+
+// delete does a recursive deletion
+func (p *Tree) deletePrefix(parent, n *node, prefix Key) int {
+	// Check for key exhaustion
+	if len(prefix) == 0 {
+		// Remove the leaf node
+		subTreeSize := 0
+		//recursively walk from all edges of the node to be deleted
+		recursiveWalk(n, func(leaf Leaf) bool {
+			subTreeSize++
+			return false
+		})
+		if n.isLeaf() {
+			n.leaf = nil
+		}
+		// deletes the entire subtree
+		n.edges.literalEdges = nil
+		n.edges.patternedEdges = nil
+
+		// Check if we should merge the parent's other child
+		if parent != nil && parent != p.root && parent.size() == 1 && !parent.isLeaf() {
+			parent.mergeChild()
+		}
+		p.size -= subTreeSize
+		return subTreeSize
+	}
+
+	// Look for an edge
+	e := n.getEdge(prefix[0])
+	if e == nil {
+		return 0
+	}
+	child := e.node
+	commonPrefix := longestPrefix(child.prefix, prefix)
+	if commonPrefix != len(child.prefix) && commonPrefix != len(prefix) {
+		return 0
+	}
+
+	// Consume the search prefix
+	if len(child.prefix) > len(prefix) {
+		prefix = prefix[len(prefix):]
+	} else {
+		prefix = prefix[len(child.prefix):]
+	}
+	return p.deletePrefix(n, child, prefix)
+}
+
 // Get is used to lookup a specific key, returning
 // the value and if it was found
-func (p *Tree) Get(k Key) (leaves []*Leaf) {
-	// Check for key exhaustion
-	if len(k) == 0 {
-		if p.root.isLeaf() {
-			leaves = append(leaves, p.root.leaf)
-		}
-	} else {
+func (p *Tree) Get(k Key) (leaves []Leaf) {
+	v := p.get(k)
+	sort.Sort(sortLeafByPattern(v))
+	return v
+}
+
+func (p *Tree) get(k Key) (leaves []Leaf) {
+	if len(k) > 0 {
 		// Look for an edge
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if commonPrefix := longestPrefix(k, n.prefix); commonPrefix == len(n.prefix) {
+			if commonPrefix := longestPrefixMatch(k, n.prefix); commonPrefix == len(n.prefix) {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.Get(k[commonPrefix:])...)
+				leaves = append(leaves, t.get(k[commonPrefix:])...)
 			}
 		}
+	} else if p.root.isLeaf() {
+		leaves = append(leaves, *p.root.leaf)
 	}
+
 	return
 }
 
 // LongestPrefix is like Get, but instead of an
 // exact match, it will return the longest prefix match.
-func (p *Tree) LongestPrefix(k Key) (leaves []*Leaf) {
+func (p *Tree) LongestPrefix(k Key) (leaves []Leaf) {
+	v := p.longestPrefix(k)
+	sort.Sort(sortLeafByPattern(v))
+	return v
+}
+
+func (p *Tree) longestPrefix(k Key) (leaves []Leaf) {
 	if p.root.isLeaf() {
-		leaves = append(leaves, p.root.leaf)
+		leaves = append(leaves, *p.root.leaf)
 	}
 	if len(k) > 0 {
 		// Look for an edge
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if commonPrefix := longestPrefix(k, n.prefix); commonPrefix == len(n.prefix) {
+			if commonPrefix := longestPrefixMatch(k, n.prefix); commonPrefix == len(n.prefix) {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.LongestPrefix(k[commonPrefix:])...)
+				leaves = append(leaves, t.longestPrefix(k[commonPrefix:])...)
 			}
 		}
+
+		var (
+			longestSize   int
+			longestLeaves []Leaf
+		)
+		for _, l := range leaves {
+			n := len(l.Key)
+			if n > longestSize {
+				longestSize = n
+				longestLeaves = longestLeaves[:0]
+			}
+			if n == longestSize {
+				longestLeaves = append(longestLeaves, l)
+			}
+		}
+		leaves = longestLeaves
 	}
+
 	return
 }
 
@@ -231,7 +312,7 @@ func (p *Tree) WalkPrefix(prefix Key, fn WalkFn) {
 	} else {
 		for _, e := range p.root.search(prefix[0]) {
 			n := e.node
-			if commonPrefix := longestPrefix(prefix, n.prefix); commonPrefix == len(n.prefix) {
+			if commonPrefix := longestPrefixMatch(prefix, n.prefix); commonPrefix == len(n.prefix) {
 				t := &Tree{root: n}
 				t.WalkPrefix(prefix[commonPrefix:], fn)
 			} else if commonPrefix == len(prefix) {
@@ -246,7 +327,7 @@ func (p *Tree) WalkPrefix(prefix Key, fn WalkFn) {
 // all the entries *under* the given prefix, this walks the
 // entries *above* the given prefix.
 func (p *Tree) WalkPath(path Key, fn WalkFn) {
-	if p.root.isLeaf() && fn(p.root.leaf) {
+	if p.root.isLeaf() && fn(*p.root.leaf) {
 		return
 	}
 
@@ -256,7 +337,7 @@ func (p *Tree) WalkPath(path Key, fn WalkFn) {
 
 	for _, e := range p.root.search(path[0]) {
 		n := e.node
-		if commonPrefix := longestPrefix(path, n.prefix); commonPrefix == len(n.prefix) {
+		if commonPrefix := longestPrefixMatch(path, n.prefix); commonPrefix == len(n.prefix) {
 			t := &Tree{root: n}
 			t.WalkPath(path[commonPrefix:], fn)
 		}
@@ -267,13 +348,16 @@ func (p *Tree) WalkPath(path Key, fn WalkFn) {
 // recursively. Returns true if the walk should be aborted
 func recursiveWalk(n *node, fn WalkFn) bool {
 	// Visit the leaf values if any
-	if n.isLeaf() && fn(n.leaf) {
+	if n.isLeaf() && fn(*n.leaf) {
 		return true
 	}
 
 	// Recurse on the children
-	x := sortEdgeByPattern(append(n.edges.literalEdges, n.edges.patternedEdges...))
-	sort.Sort(x)
+	x := n.edges.literalEdges
+	if len(n.edges.patternedEdges) > 0 {
+		x = append(x, n.edges.patternedEdges...)
+		sort.Sort(sortEdgeByPattern(x))
+	}
 
 	for _, e := range x {
 		if recursiveWalk(e.node, fn) {

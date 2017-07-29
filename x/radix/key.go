@@ -119,7 +119,7 @@ func (k Key) Strings() []string {
 func NewCharKey(s string) Key {
 	var (
 		last = -1
-		v []string
+		v    []string
 	)
 	for i := range s {
 		if last != -1 {

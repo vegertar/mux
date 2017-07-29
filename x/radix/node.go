@@ -4,13 +4,13 @@ import (
 	"sort"
 )
 
-// leaf is used to represent a value
+// Leaf is used to represent a value
 type Leaf struct {
 	Key   Key
 	Value interface{}
 }
 
-type sortLeafByPattern []*Leaf
+type sortLeafByPattern []Leaf
 
 func (l sortLeafByPattern) Len() int { return len(l) }
 
@@ -84,12 +84,18 @@ func longestPrefix(x, y Key) int {
 	return i
 }
 
-func insertionSort(data sort.Interface, a, b int) {
-	for i := a + 1; i < b; i++ {
-		for j := i; j > a && data.Less(j, j-1); j-- {
-			data.Swap(j, j-1)
+func longestPrefixMatch(x, y Key) int {
+	max := len(x)
+	if l := len(y); l < max {
+		max = l
+	}
+	var i int
+	for i = 0; i < max; i++ {
+		if !x[i].Match(y[i].String()) && !y[i].Match(x[i].String()) {
+			break
 		}
 	}
+	return i
 }
 
 type node struct {
@@ -127,7 +133,7 @@ func (p *node) addEdge(e edge) {
 func (p *node) delEdge(l Label) {
 	s := l.String()
 	if l.Literal() {
-		x := sortEdgeByLiteral(p.edges.literalEdges)
+		x := p.edges.literalEdges
 		i := sort.Search(len(x), func(i int) bool {
 			return x[i].label.String() >= s
 		})
@@ -135,7 +141,7 @@ func (p *node) delEdge(l Label) {
 			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i+1:]...)
 		}
 	} else {
-		x := sortEdgeByLiteral(p.edges.patternedEdges)
+		x := p.edges.patternedEdges
 		i := sort.Search(len(x), func(i int) bool {
 			return x[i].label.String() >= s
 		})
@@ -148,7 +154,7 @@ func (p *node) delEdge(l Label) {
 func (p *node) getEdge(l Label) *edge {
 	s := l.String()
 	if len(p.edges.literalEdges) > 0 {
-		x := sortEdgeByLiteral(p.edges.literalEdges)
+		x := p.edges.literalEdges
 		i := sort.Search(len(x), func(i int) bool {
 			return x[i].label.String() >= s
 		})
@@ -158,7 +164,7 @@ func (p *node) getEdge(l Label) *edge {
 	}
 
 	if len(p.edges.patternedEdges) > 0 {
-		x := sortEdgeByLiteral(p.edges.patternedEdges)
+		x := p.edges.patternedEdges
 		i := sort.Search(len(x), func(i int) bool {
 			return x[i].label.String() >= s
 		})
@@ -175,7 +181,7 @@ func (p *node) search(l Label) []edge {
 
 	var found []edge
 	if len(p.edges.literalEdges) > 0 {
-		x := sortEdgeByLiteral(p.edges.literalEdges)
+		x := p.edges.literalEdges
 		i := sort.Search(len(x), func(i int) bool {
 			return x[i].label.String() >= s
 		})

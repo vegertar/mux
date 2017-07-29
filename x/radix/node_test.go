@@ -1,9 +1,9 @@
 package radix
 
 import (
-	"testing"
-	"sort"
 	"reflect"
+	"sort"
+	"testing"
 )
 
 func stringLabel(s string) Label {
@@ -45,7 +45,7 @@ func TestLessLabel(t *testing.T) {
 	for i, c := range cases {
 		x, y := c.fn(c.x), c.fn(c.y)
 		if lessLabel(x, y) != c.ok {
-			t.Errorf("bad case %v: %v", i + 1, c)
+			t.Errorf("bad case %v: %v", i+1, c)
 		}
 	}
 }
@@ -76,12 +76,14 @@ func TestLessKey(t *testing.T) {
 		{[]string{"x"}, []string{"*x"}, true, NewGlobSliceKey},
 		{[]string{"x*"}, []string{"x"}, false, NewStringSliceKey},
 		{[]string{"x*"}, []string{"x"}, false, NewGlobSliceKey},
+		{[]string{"x", "x"}, []string{"x"}, false, NewStringSliceKey},
+		{[]string{"x*"}, []string{"x", "y"}, false, NewGlobSliceKey},
 	}
 
 	for i, c := range cases {
 		x, y := c.fn(c.x), c.fn(c.y)
 		if lessKey(x, y) != c.ok {
-			t.Errorf("bad case %v: %v", i + 1, c)
+			t.Errorf("bad case %v: %v", i+1, c)
 		}
 	}
 }
@@ -91,6 +93,7 @@ func TestNode_Search(t *testing.T) {
 		x  string
 		fn func(string) Label
 	}{
+		{"", stringLabel},
 		{"/v1/x", stringLabel},
 		{"/v2/x", stringLabel},
 		{"/v*/x", globLabel},
@@ -104,7 +107,7 @@ func TestNode_Search(t *testing.T) {
 		})
 	}
 
-	output := []struct{
+	output := []struct {
 		x string
 		y []string
 	}{
@@ -127,7 +130,7 @@ func TestNode_Search(t *testing.T) {
 
 		y := Key(l).Strings()
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
+			t.Errorf("bad case %v: expected %v, got %v", i+1, c.y, y)
 		}
 	}
 }
