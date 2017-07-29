@@ -45,22 +45,33 @@ func (p *Router) Routes() []Route {
 }
 
 // Match returns an associated `http.Handle` by given route.
-func (p *Router) Match(r Route) http.Handler {
-	return newHandlerFromLabel(p.Router.Match(r.Strings()))
+func (p *Router) Match(c RouteConfig) http.Handler {
+	r, err := newRoute(c)
+	if err != nil {
+		return func(w Response, req *Request) {
+			http.Error(w, err, 500)
+		}
+	}
+	return newHandlerFromLabel(p.Router.Match(r))
 }
 
 // Use associates a route with middlewares.
-func (p *Router) Use(r Route, m ...Middleware) (x.CloseFunc, error) {
+func (p *Router) Use(c RouteConfig, m ...Middleware) (x.CloseFunc, error) {
+	r, err := newRoute(c)
+	if err != nil {
+		return nil, err
+	}
+
 	m2 := make([]interface{}, 0, len(m))
 	for _, v := range m {
 		m2 = append(m2, v)
 	}
 
-	return p.Router.Use(r.Strings(), m2...)
+	return p.Router.Use(r, m2...)
 }
 
 // UseFunc associates a route with middleware functions.
-func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
+func (p *Router) UseFunc(r RouteConfig, m ...MiddlewareFunc) (x.CloseFunc, error) {
 	m2 := make([]Middleware, 0, len(m))
 	for _, v := range m {
 		m2 = append(m2, v)
@@ -69,29 +80,36 @@ func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
 }
 
 // Handle associates a route with a `http.Handler`.
-func (p *Router) Handle(r Route, h http.Handler) (x.CloseFunc, error) {
-	return p.Router.Handle(r.Strings(), h)
+func (p *Router) Handle(c RouteConfig, h http.Handler) (x.CloseFunc, error) {
+	r, err := newRoute(c)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.Router.Handle(r, h)
 }
 
 // HandleFunc associates a route with an `http.HandlerFunc`.
-func (p *Router) HandleFunc(r Route, h http.HandlerFunc) (x.CloseFunc, error) {
+func (p *Router) HandleFunc(c RouteConfig, h http.HandlerFunc) (x.CloseFunc, error) {
 	return p.Handle(r, h)
 }
 
 // ServeHTTP implements the `http.Handler` interface.
 func (p *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	var r Route
-	r.Scheme = req.URL.Scheme
-	if r.Scheme == "" {
-		r.Scheme = "http"
+	var c RouteConfig
+	c.UseLiteral = true
+
+	c.Scheme = req.URL.Scheme
+	if c.Scheme == "" {
+		c.Scheme = "http"
 	}
 
-	r.Method = req.Method
-	r.Host, _, _ = net.SplitHostPort(req.Host)
-	if r.Host == "" {
-		r.Host = req.Host
+	c.Method = req.Method
+	c.Host, _, _ = net.SplitHostPort(req.Host)
+	if c.Host == "" {
+		c.Host = req.Host
 	}
-	r.Path = req.URL.Path
+	c.Path = req.URL.Path
 
-	p.Match(r).ServeHTTP(w, req)
+	p.Match(c).ServeHTTP(w, req)
 }

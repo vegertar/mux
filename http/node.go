@@ -1,16 +1,14 @@
 package http
 
 import (
-	radix "github.com/armon/go-radix"
-	"github.com/gobwas/glob"
 	"github.com/vegertar/mux/x"
+	"github.com/vegertar/mux/x/radix"
 )
 
 // Node uses trie tree to store and search labeled route components.
 type Node struct {
-	labels []*x.Label
-	tree   *radix.Tree
-	up     *x.Label
+	tree *radix.Tree
+	up   *x.Label
 }
 
 // NewNode creates a node instance.
@@ -27,7 +25,7 @@ func (p *Node) Up() *x.Label {
 
 // Empty implements the `x.Node` interface.
 func (p *Node) Empty() bool {
-	return len(p.labels) == 0 && p.tree.Len() == 0
+	return p.tree.Len() == 0
 }
 
 // Delete implements the `x.Node` interface.
@@ -51,7 +49,7 @@ func (p *Node) Delete(label *x.Label) {
 // Make implements the `x.Node` interface.
 func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 	node := p
-	for _, s := range route {
+	for _, k := range route {
 		if leaf != nil {
 			if leaf.Down == nil {
 				down := NewNode()
@@ -62,7 +60,7 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 			node = leaf.Down.(*Node)
 		}
 
-		leaf = node.find(s)
+		leaf = node.find(k)
 
 		if leaf == nil {
 			leaf, err = x.NewLabel(s)
@@ -72,18 +70,6 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 
 			leaf.Node = node
 			if leaf.Glob != nil {
-				var group1, group2, group3 []*x.Label
-				for _, l := range node.labels {
-					if leaf.Match(l.String()) {
-						group1 = append(group1, l)
-					} else if l.Match(leaf.String()) {
-						group2 = append(group2, l)
-					} else {
-						group3 = append(group3, l)
-					}
-				}
-
-				node.labels = append(append(append(group1, leaf), group2...), group3...)
 			} else {
 				node.tree.Insert(leaf.String(), leaf)
 			}
@@ -98,14 +84,14 @@ func (p *Node) Get(route x.Route) *x.Label {
 	var leaf *x.Label
 
 	node := p
-	for _, s := range route {
+	for _, k := range route {
 		if leaf != nil {
 			node = leaf.Down.(*Node)
 			leaf = nil
 		}
 
 		if node != nil {
-			leaf = node.find(s)
+			leaf = node.find(k)
 		}
 
 		if leaf == nil {
@@ -195,20 +181,10 @@ func (p *Node) Leaves() []*x.Label {
 	return out
 }
 
-func (p *Node) find(s string) *x.Label {
-	if p.tree.Len() > 0 || len(p.labels) > 0 {
-		if glob.QuoteMeta(s) == s {
-			if v, ok := p.tree.Get(s); ok {
-				return v.(*x.Label)
-			}
-		} else {
-			for _, l := range p.labels {
-				if l.String() == s {
-					return l
-				}
-			}
-		}
+func (p *Node) find(k radix.Key) *x.Label {
+	value, ok := p.tree.Get(k)
+	if ok && value != nil {
+		return value.(*x.Label)
 	}
-
 	return nil
 }

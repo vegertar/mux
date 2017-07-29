@@ -233,21 +233,44 @@ func (p *Tree) deletePrefix(parent, n *node, prefix Key) int {
 
 // Get is used to lookup a specific key, returning
 // the value and if it was found
-func (p *Tree) Get(k Key) (leaves []Leaf) {
-	v := p.get(k)
+func (p *Tree) Get(k Key) (interface{}, bool) {
+	if len(k) > 0 {
+		// Look for an edge
+		e := p.root.getEdge(k[0])
+		if e == nil {
+			return nil, false
+		}
+
+		n := e.node
+		// Consume the search prefix
+		if isPrefixOfLiteralKey(n.prefix, k) {
+			t := &Tree{root: n}
+			return t.Get(k[len(n.prefix):])
+		}
+
+	} else if p.root.isLeaf() {
+		return p.root.leaf.Value, true
+	}
+
+	return nil, false
+}
+
+// Match is used to lookup a specific key, returning all matched leaves.
+func (p *Tree) Match(k Key) (leaves []Leaf) {
+	v := p.match(k)
 	sort.Sort(sortLeafByPattern(v))
 	return v
 }
 
-func (p *Tree) get(k Key) (leaves []Leaf) {
+func (p *Tree) match(k Key) (leaves []Leaf) {
 	if len(k) > 0 {
-		// Look for an edge
+		// Look for edges
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if commonPrefix := longestPrefixMatch(k, n.prefix); commonPrefix == len(n.prefix) {
+			if isPrefixOfLiteralKey(n.prefix, k) {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.get(k[commonPrefix:])...)
+				leaves = append(leaves, t.match(k[len(n.prefix):])...)
 			}
 		}
 	} else if p.root.isLeaf() {
@@ -257,7 +280,7 @@ func (p *Tree) get(k Key) (leaves []Leaf) {
 	return
 }
 
-// LongestPrefix is like Get, but instead of an
+// LongestPrefix is like Match, but instead of an
 // exact match, it will return the longest prefix match.
 func (p *Tree) LongestPrefix(k Key) (leaves []Leaf) {
 	v := p.longestPrefix(k)
@@ -274,9 +297,9 @@ func (p *Tree) longestPrefix(k Key) (leaves []Leaf) {
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if commonPrefix := longestPrefixMatch(k, n.prefix); commonPrefix == len(n.prefix) {
+			if isPrefixOfLiteralKey(n.prefix, k) {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.longestPrefix(k[commonPrefix:])...)
+				leaves = append(leaves, t.longestPrefix(k[len(n.prefix):])...)
 			}
 		}
 
@@ -309,15 +332,16 @@ func (p *Tree) Walk(fn WalkFn) {
 func (p *Tree) WalkPrefix(prefix Key, fn WalkFn) {
 	if len(prefix) == 0 {
 		recursiveWalk(p.root, fn)
-	} else {
-		for _, e := range p.root.search(prefix[0]) {
-			n := e.node
-			if commonPrefix := longestPrefixMatch(prefix, n.prefix); commonPrefix == len(n.prefix) {
-				t := &Tree{root: n}
-				t.WalkPrefix(prefix[commonPrefix:], fn)
-			} else if commonPrefix == len(prefix) {
-				recursiveWalk(n, fn)
-			}
+		return
+	}
+
+	for _, e := range p.root.search(prefix[0]) {
+		n := e.node
+		if isPrefixOfLiteralKey(n.prefix, prefix) {
+			t := &Tree{root: n}
+			t.WalkPrefix(prefix[len(n.prefix):], fn)
+		} else if longestPrefix(n.prefix, prefix) == len(prefix) {
+			recursiveWalk(n, fn)
 		}
 	}
 }
@@ -337,9 +361,9 @@ func (p *Tree) WalkPath(path Key, fn WalkFn) {
 
 	for _, e := range p.root.search(path[0]) {
 		n := e.node
-		if commonPrefix := longestPrefixMatch(path, n.prefix); commonPrefix == len(n.prefix) {
+		if isPrefixOfLiteralKey(n.prefix, path) {
 			t := &Tree{root: n}
-			t.WalkPath(path[commonPrefix:], fn)
+			t.WalkPath(path[len(n.prefix):], fn)
 		}
 	}
 }

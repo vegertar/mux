@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+
+	"github.com/vegertar/mux/x/radix"
 )
 
 var (
@@ -20,7 +22,7 @@ type (
 	CloseFunc func()
 
 	// Route is a matching sequence for muxing request, e.g. an array of `scheme`, `method`, `path`, etc.
-	Route []string
+	Route []radix.Key
 
 	// Router is a root node of mux and carries a few options.
 	Router struct {

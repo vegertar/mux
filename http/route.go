@@ -1,65 +1,74 @@
 package http
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/vegertar/mux/x"
+	"github.com/vegertar/mux/x/radix"
 )
 
-// Route is the HTTP route components.
-type Route struct {
-	Scheme string `json:"scheme,omitempty"`
-	Method string `json:"method,omitempty"`
-	Host   string `json:"host,omitempty"`
-	Path   string `json:"path,omitempty"`
+var globSlice = []string{"*"}
+
+// RouteConfig is the HTTP route component configure.
+type RouteConfig struct {
+	Scheme     string `json:"scheme,omitempty"`
+	Method     string `json:"method,omitempty"`
+	Host       string `json:"host,omitempty"`
+	Path       string `json:"path,omitempty"`
+	UseLiteral bool   `json:"useLiteral,omitempty"`
 }
 
-// String returns the string representation.
-// Pay attention that the empty component is replaced by asterisk (*).
-func (r Route) String() string {
-	if len(r.Scheme) == 0 {
-		r.Scheme = "*"
+func newRoute(c RouteConfig) (x.Route, error) {
+	v := make([]radix.Key, 0, 4)
+	f := x.NewGlobSliceKey
+	if c.UseLiteral {
+		f = x.NewStringSliceKey
 	}
-	if len(r.Method) == 0 {
-		r.Method = "*"
-	}
-	if len(r.Host) == 0 {
-		r.Host = "*"
-	}
-	if len(r.Path) == 0 {
-		r.Path = "*"
-	}
-	return fmt.Sprintf("%s %s://%s%s", r.Method, r.Scheme, r.Host, r.Path)
-}
 
-// Strings returns a route sequence with all empty components are replaced by asterisks.
-// Furthermore, the last continuous asterisks are merged as one component.
-func (r Route) Strings() []string {
-	out := []string{"*", "*", "*", "*"}
+	var (
+		key radix.Key
+		err error
+	)
 
 	if len(r.Scheme) > 0 {
-		out[0] = strings.ToLower(r.Scheme)
+		key, err = f([]string{strings.ToUpper(r.Scheme)})
+	} else {
+		key, err = f(globSlice)
 	}
+	if err != nil {
+		return nil, err
+	}
+	v = append(v, key)
 
 	if len(r.Method) > 0 {
-		out[1] = strings.ToUpper(r.Method)
+		key, err = f([]string{strings.ToUpper(r.Method)})
+	} else {
+		key, err = f(globSlice)
 	}
+	if err != nil {
+		return nil, err
+	}
+	v = append(v, key)
 
 	if len(r.Host) > 0 {
-		out[2] =  strings.ToLower(r.Host)
+		key, err = f(strings.Split(strings.ToLower(r.Host), "."))
+	} else {
+		key, err = f(globSlice)
 	}
+	if err != nil {
+		return nil, err
+	}
+	v = append(v, key)
 
 	if len(r.Path) > 0 {
-		out[3] =  r.Path
+		key, err = f(strings.Split(strings.ToLower(r.Path), "/"))
+	} else {
+		key, err = f(globSlice)
 	}
-
-	index := len(out)
-	for index > 0 && out[index-1] == "*" {
-		index--
+	if err != nil {
+		return nil, err
 	}
+	v = append(v, key)
 
-	if index < len(out) {
-		out = out[:index+1]
-	}
-
-	return out
+	return v, nil
 }

@@ -84,18 +84,11 @@ func longestPrefix(x, y Key) int {
 	return i
 }
 
-func longestPrefixMatch(x, y Key) int {
-	max := len(x)
-	if l := len(y); l < max {
-		max = l
+func isPrefixOfLiteralKey(x, y Key) bool {
+	if len(x) <= len(y) {
+		return x.Match(y[:len(x)])
 	}
-	var i int
-	for i = 0; i < max; i++ {
-		if !x[i].Match(y[i].String()) && !y[i].Match(x[i].String()) {
-			break
-		}
-	}
-	return i
+	return false
 }
 
 type node struct {

@@ -50,7 +50,7 @@ func TestTree(t *testing.T) {
 	})
 
 	for i, k := range input {
-		out := r.Get(NewCharKey(k))
+		out := r.Match(NewCharKey(k))
 		if len(out) != 1 {
 			t.Fatalf("missing key: %v", k)
 		}
@@ -84,11 +84,15 @@ func TestRoot(t *testing.T) {
 	if ok {
 		t.Fatalf("bad")
 	}
-	leaves := r.Get(k)
+	leaves := r.Match(k)
 	if len(leaves) != 1 || leaves[0].Value != true {
 		t.Fatalf("bad: %v", leaves)
 	}
-	val, ok := r.Delete(k)
+	val, ok := r.Get(k)
+	if !ok || val != true {
+		t.Fatalf("bad: %v", val)
+	}
+	val, ok = r.Delete(k)
 	if !ok || val != true {
 		t.Fatalf("bad: %v", val)
 	}
@@ -409,28 +413,20 @@ func TestWalkPath(t *testing.T) {
 	}
 }
 
-func BenchmarkTree_Insert_Char(b *testing.B) {
+func BenchmarkTree_Insert(b *testing.B) {
 	r := New()
 	for i := 0; i < b.N; i++ {
-		k := NewCharKey(randomString(8))
+		k := NewCharKey(randomString(128))
 		r.Insert(k, i)
 	}
 }
 
-func BenchmarkTree_Insert_String(b *testing.B) {
-	r := New()
-	for i := 0; i < b.N; i++ {
-		k := NewStringSliceKey(randomStringSlice(8, 8))
-		r.Insert(k, i)
-	}
-}
-
-func BenchmarkTree_Get_Char(b *testing.B) {
+func BenchmarkTree_Get(b *testing.B) {
 	b.StopTimer()
 	r := New()
 	var keys []Key
 	for i := 0; i < b.N; i++ {
-		k := NewCharKey(randomString(8))
+		k := NewCharKey(randomString(128))
 		r.Insert(k, i)
 		keys = append(keys, k)
 	}
@@ -440,32 +436,17 @@ func BenchmarkTree_Get_Char(b *testing.B) {
 	}
 }
 
-func BenchmarkTree_Get_String(b *testing.B) {
+func BenchmarkTree_Match(b *testing.B) {
 	b.StopTimer()
 	r := New()
 	var keys []Key
 	for i := 0; i < b.N; i++ {
-		k := NewStringSliceKey(randomStringSlice(8, 8))
+		k := NewCharKey(randomString(128))
 		r.Insert(k, i)
 		keys = append(keys, k)
 	}
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		r.Get(keys[i])
-	}
-}
-
-func BenchmarkTree_Get_Glob(b *testing.B) {
-	b.StopTimer()
-	r := New()
-	var keys []Key
-	for i := 0; i < b.N; i++ {
-		k := NewGlobSliceKey(randomStringSlice(8, 8))
-		r.Insert(k, i)
-		keys = append(keys, k)
-	}
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		r.Get(keys[i])
+		r.Match(keys[i])
 	}
 }

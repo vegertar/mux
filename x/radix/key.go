@@ -97,6 +97,19 @@ func NewGlobLabel(s string) *GlobLabel {
 // Key is the key to insert, delete, and search a tree.
 type Key []Label
 
+// Match returns if key matches another one.
+func (k Key) Match(x Key) bool {
+	if len(k) == len(x) {
+		for i, label := range k {
+			if !label.Match(x[i].String()) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // StringWith returns a string joined with the given separator.
 func (k Key) StringWith(separator string) string {
 	return strings.Join(k.Strings(), separator)
@@ -156,7 +169,13 @@ func NewGlobKey(s, separator string) Key {
 func NewGlobSliceKey(v []string) Key {
 	labels := make([]Label, 0, len(v))
 	for _, s := range v {
-		labels = append(labels, NewGlobLabel(s))
+		var label Label
+		if strings.Index(s, glob) != -1 {
+			label = NewGlobLabel(s)
+		} else {
+			label = StringLabel(s)
+		}
+		labels = append(labels, label)
 	}
 	return labels
 }
