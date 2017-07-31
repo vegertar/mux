@@ -13,9 +13,9 @@ type Value struct {
 func (p *Value) Root() Node {
 	var node Node
 
-	for label := p; label != nil && label.Node != nil; {
-		node = label.Node
-		label = node.Up()
+	for v := p; v != nil && v.Node != nil; {
+		node = v.Node
+		v = node.Up()
 	}
 
 	return node

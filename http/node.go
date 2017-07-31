@@ -5,10 +5,10 @@ import (
 	"github.com/vegertar/mux/x/radix"
 )
 
-// Node uses trie tree to store and search labeled route components.
+// Node uses trie tree to store and search route components.
 type Node struct {
 	tree *radix.Tree
-	up   *x.Label
+	up   *x.Value
 }
 
 // NewNode creates a node instance.
@@ -29,25 +29,12 @@ func (p *Node) Empty() bool {
 }
 
 // Delete implements the `x.Node` interface.
-func (p *Node) Delete(label *x.Label) {
-	if label.Glob == nil {
-		p.tree.Delete(label.String())
-	} else {
-		index := -1
-		for i, v := range p.labels {
-			if v.String() == label.String() {
-				index = i
-				break
-			}
-		}
-		if index != -1 {
-			p.labels = append(p.labels[:index], p.labels[index+1:]...)
-		}
-	}
+func (p *Node) Delete(key radix.Key) {
+	p.tree.Delete(key)
 }
 
 // Make implements the `x.Node` interface.
-func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
+func (p *Node) Make(route x.Route) (leaf *x.Value, err error) {
 	node := p
 	for _, k := range route {
 		if leaf != nil {
@@ -61,18 +48,10 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 		}
 
 		leaf = node.find(k)
-
 		if leaf == nil {
-			leaf, err = x.NewLabel(s)
-			if err != nil {
-				return nil, err
-			}
-
+			leaf = new(x.Value)
 			leaf.Node = node
-			if leaf.Glob != nil {
-			} else {
-				node.tree.Insert(leaf.String(), leaf)
-			}
+			node.tree.Insert(k, leaf)
 		}
 	}
 
@@ -80,8 +59,8 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 }
 
 // Get implements the `x.Node` interface.
-func (p *Node) Get(route x.Route) *x.Label {
-	var leaf *x.Label
+func (p *Node) Get(route x.Route) *x.Value {
+	var leaf *x.Value
 
 	node := p
 	for _, k := range route {
@@ -103,56 +82,26 @@ func (p *Node) Get(route x.Route) *x.Label {
 }
 
 // Match implements the `x.Node` interface.
-func (p *Node) Match(route x.Route) x.Label {
-	var leaf x.Label
+func (p *Node) Match(route x.Route) x.Value {
+	var leaf x.Value
 	leaf.Node = p
 
 	if len(route) > 0 {
-		s := route[0]
-
-		var (
-			labels     []*x.Label
-			middleware []interface{}
-		)
-
-		if v, ok := p.tree.Get(s); ok {
-			label := v.(*x.Label)
-			middleware = append(middleware, label.Middleware...)
-			labels = append(labels, label)
-		}
-
-		for _, label := range p.labels {
-			if label.Match(s) {
-				middleware = append(middleware, label.Middleware...)
-				labels = append(labels, label)
+		for _, v := range p.tree.Match(route[0]) {
+			value := v.Value.(*x.Value)
+			if value.Down != nil && len(route) > 1 {
+				x := value.Down.Match(route[1:])
+				if len(x.Handler) > 0 {
+					leaf.Handler = append(leaf.Handler, x.Handler...)
+				}
+				leaf.Middleware = append(middleware, x.Middleware...)
+			} else if len(route) == 1 {
+				if len(value.Handler) > 0 {
+					leaf.Handler = append(leaf.Handler, value.Handler...)
+				}
+				leaf.Middleware = append(middleware, value.Middleware...)
 			}
 		}
-
-		var available *x.Label
-		for _, label := range labels {
-			if len(label.Handler) > 0 {
-				available = label
-			}
-			leaf = *label
-
-			if label.Down != nil && len(route) > 1 {
-				leaf = label.Down.Match(route[1:])
-			}
-
-			if len(leaf.Handler) > 0 {
-				break
-			}
-		}
-
-		for i, j := 0, len(middleware)-1; i < j; i, j = i+1, j-1 {
-			middleware[i], middleware[j] = middleware[j], middleware[i]
-		}
-		middleware = append(middleware, leaf.Middleware...)
-
-		if len(leaf.Handler) == 0 && available != nil {
-			leaf = *available
-		}
-		leaf.Middleware = middleware
 	}
 
 	return leaf
