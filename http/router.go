@@ -28,15 +28,15 @@ func (p *Router) Routes() []Route {
 
 	for _, route := range p.Router.Routes() {
 		var r Route
-		r.Scheme = route[len(route)-1]
+		r.Scheme = route[0].StringWith("")
 		if len(route) > 1 {
-			r.Method = route[len(route)-2]
+			r.Method = route[1].StringWith("")
 		}
 		if len(route) > 2 {
-			r.Host = route[len(route)-3]
+			r.Host = route[2].StringWith(".")
 		}
 		if len(route) > 3 {
-			r.Path = route[len(route)-4]
+			r.Path = route[3].StringWith("/")
 		}
 		out = append(out, r)
 	}
@@ -45,18 +45,18 @@ func (p *Router) Routes() []Route {
 }
 
 // Match returns an associated `http.Handle` by given route.
-func (p *Router) Match(c RouteConfig) http.Handler {
+func (p *Router) Match(c Route) http.Handler {
 	r, err := newRoute(c)
 	if err != nil {
-		return func(w Response, req *Request) {
+		return func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err, 500)
 		}
 	}
 	return newHandlerFromLabel(p.Router.Match(r))
 }
 
-// Use associates a route with middlewares.
-func (p *Router) Use(c RouteConfig, m ...Middleware) (x.CloseFunc, error) {
+// Use associates a route with middleware.
+func (p *Router) Use(c Route, m ...Middleware) (x.CloseFunc, error) {
 	r, err := newRoute(c)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (p *Router) Use(c RouteConfig, m ...Middleware) (x.CloseFunc, error) {
 }
 
 // UseFunc associates a route with middleware functions.
-func (p *Router) UseFunc(r RouteConfig, m ...MiddlewareFunc) (x.CloseFunc, error) {
+func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
 	m2 := make([]Middleware, 0, len(m))
 	for _, v := range m {
 		m2 = append(m2, v)
@@ -80,7 +80,7 @@ func (p *Router) UseFunc(r RouteConfig, m ...MiddlewareFunc) (x.CloseFunc, error
 }
 
 // Handle associates a route with a `http.Handler`.
-func (p *Router) Handle(c RouteConfig, h http.Handler) (x.CloseFunc, error) {
+func (p *Router) Handle(c Route, h http.Handler) (x.CloseFunc, error) {
 	r, err := newRoute(c)
 	if err != nil {
 		return nil, err
@@ -90,26 +90,26 @@ func (p *Router) Handle(c RouteConfig, h http.Handler) (x.CloseFunc, error) {
 }
 
 // HandleFunc associates a route with an `http.HandlerFunc`.
-func (p *Router) HandleFunc(c RouteConfig, h http.HandlerFunc) (x.CloseFunc, error) {
-	return p.Handle(r, h)
+func (p *Router) HandleFunc(c Route, h http.HandlerFunc) (x.CloseFunc, error) {
+	return p.Handle(c, h)
 }
 
 // ServeHTTP implements the `http.Handler` interface.
 func (p *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	var c RouteConfig
-	c.UseLiteral = true
+	var r Route
+	r.UseLiteral = true
 
-	c.Scheme = req.URL.Scheme
-	if c.Scheme == "" {
-		c.Scheme = "http"
+	r.Scheme = req.URL.Scheme
+	if r.Scheme == "" {
+		r.Scheme = "http"
 	}
 
-	c.Method = req.Method
-	c.Host, _, _ = net.SplitHostPort(req.Host)
-	if c.Host == "" {
-		c.Host = req.Host
+	r.Method = req.Method
+	r.Host, _, _ = net.SplitHostPort(req.Host)
+	if r.Host == "" {
+		r.Host = req.Host
 	}
-	c.Path = req.URL.Path
+	r.Path = req.URL.Path
 
-	p.Match(c).ServeHTTP(w, req)
+	p.Match(r).ServeHTTP(w, req)
 }

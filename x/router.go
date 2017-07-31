@@ -1,4 +1,4 @@
-// Package x implements a common router entry to concurrently add and delete mux handles and middlewares.
+// Package x implements a common router entry to concurrently add and delete mux handlers and middleware.
 package x
 
 import (
@@ -12,7 +12,7 @@ import (
 var (
 	// ErrExistedRoute resulted from adding a handler with an existed route if configured `DisableDupRoute`.
 	ErrExistedRoute = errors.New("existed route")
-	// ErrNonTrivialRoute resulted from deleting a route associated any handles or middlewares.
+	// ErrNonTrivialRoute resulted from deleting a route associated any handlers or middleware.
 	ErrNonTrivialRoute = errors.New("non trivial route")
 )
 
@@ -32,22 +32,7 @@ type (
 	}
 )
 
-// Equal checks if both routes are the same.
-func (r Route) Equal(other Route) bool {
-	if len(r) == len(other) {
-		for i := range r {
-			if r[i] != other[i] {
-				return false
-			}
-		}
-
-		return true
-	}
-
-	return false
-}
-
-// Routes returns all routes which has associated handles or middlewares.
+// Routes returns all routes which has associated handlers or middleware.
 func (p *Router) Routes() []Route {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -55,10 +40,10 @@ func (p *Router) Routes() []Route {
 	var out []Route
 
 	for _, leaf := range p.Node.Leaves() {
-		var layers []string
+		var layers []radix.Key
 		for leaf != nil {
 			if len(leaf.Handler) > 0 || len(leaf.Middleware) > 0 {
-				layers = append(layers, leaf.String())
+				layers = append(layers, leaf.Key)
 			}
 			leaf = leaf.Node.Up()
 		}
@@ -79,7 +64,7 @@ func (p *Router) Match(r Route) Label {
 	return p.Node.Match(r)
 }
 
-// Use associates a route with middlewares.
+// Use associates a route with middleware.
 func (p *Router) Use(r Route, m ...interface{}) (CloseFunc, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -118,7 +103,7 @@ func (p *Router) Use(r Route, m ...interface{}) (CloseFunc, error) {
 	}, nil
 }
 
-// Handle associates a route with handles.
+// Handle associates a route with handlers.
 // If configured `DisableDupRoute`, only one handle can be added or `ErrExistedRoute` will be returned.
 func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 	p.mu.Lock()
@@ -163,7 +148,7 @@ func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 }
 
 // free deletes a trivial route from down to up recursively.
-func (p *Router) free(leaf *Label) {
+func (p *Router) free(leaf *Value) {
 	for leaf != nil && len(leaf.Middleware) == 0 && len(leaf.Handler) == 0 {
 		node := leaf.Node
 		node.Delete(leaf)

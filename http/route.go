@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/vegertar/mux/x"
@@ -9,8 +10,8 @@ import (
 
 var globSlice = []string{"*"}
 
-// RouteConfig is the HTTP route component configure.
-type RouteConfig struct {
+// Route is the HTTP route component configure.
+type Route struct {
 	Scheme     string `json:"scheme,omitempty"`
 	Method     string `json:"method,omitempty"`
 	Host       string `json:"host,omitempty"`
@@ -18,10 +19,28 @@ type RouteConfig struct {
 	UseLiteral bool   `json:"useLiteral,omitempty"`
 }
 
-func newRoute(c RouteConfig) (x.Route, error) {
+// String returns the string representation.
+func (r Route) String() string {
+	scheme, method, host, path := "*", "*", "*", "*"
+	if len(r.Scheme) > 0 {
+		scheme = strings.ToLower(r.Scheme)
+	}
+	if len(r.Method) > 0 {
+		method = strings.ToUpper(r.Method)
+	}
+	if len(r.Host) > 0 {
+		host = strings.ToLower(r.Host)
+	}
+	if len(r.Path) > 0 {
+		path = strings.ToLower(r.Path)
+	}
+	return fmt.Sprintf("%s %s://%s%s", method, scheme, host, path)
+}
+
+func newRoute(r Route) (x.Route, error) {
 	v := make([]radix.Key, 0, 4)
 	f := x.NewGlobSliceKey
-	if c.UseLiteral {
+	if r.UseLiteral {
 		f = x.NewStringSliceKey
 	}
 
@@ -31,7 +50,7 @@ func newRoute(c RouteConfig) (x.Route, error) {
 	)
 
 	if len(r.Scheme) > 0 {
-		key, err = f([]string{strings.ToUpper(r.Scheme)})
+		key, err = f([]string{strings.ToLower(r.Scheme)})
 	} else {
 		key, err = f(globSlice)
 	}

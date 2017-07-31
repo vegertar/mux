@@ -3,9 +3,9 @@ package dns
 import (
 	"strings"
 
-	"github.com/armon/go-radix"
 	"github.com/miekg/dns"
 	"github.com/vegertar/mux/x"
+	"github.com/vegertar/mux/x/radix"
 )
 
 type Node struct {
@@ -28,12 +28,12 @@ func (p *Node) Empty() bool {
 }
 
 func (p *Node) Delete(label *x.Label) {
-	p.tree.Delete(label.String())
+	p.tree.Delete(label.Key)
 }
 
 func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 	node := p
-	for _, s := range route {
+	for _, k := range route {
 		if leaf != nil {
 			if leaf.Down == nil {
 				down := NewNode()
@@ -44,16 +44,12 @@ func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
 			node = leaf.Down.(*Node)
 		}
 
-		leaf = node.find(s)
-
+		leaf = node.find(k)
 		if leaf == nil {
-			leaf, err = x.NewLiteralLabel(s)
-			if err != nil {
-				return nil, err
-			}
-
+			leaf = new(x.Label)
+			leaf.Key = k
 			leaf.Node = node
-			node.tree.Insert(leaf.String(), leaf)
+			node.tree.Insert(k, leaf)
 		}
 	}
 
@@ -64,14 +60,14 @@ func (p *Node) Get(route x.Route) *x.Label {
 	var leaf *x.Label
 
 	node := p
-	for _, s := range route {
+	for _, k := range route {
 		if leaf != nil {
 			node = leaf.Down.(*Node)
 			leaf = nil
 		}
 
 		if node != nil {
-			leaf = node.find(s)
+			leaf = node.find(k)
 		}
 
 		if leaf == nil {
@@ -207,11 +203,11 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 
 func (p *Node) match(route x.Route, forName bool) (labels Match) {
 	if len(route) > 0 {
-		s := route[0]
-		label, _ := x.NewLiteralLabel(s)
+		k := route[0]
+		label, _ := x.NewLiteralLabel(k)
 
-		v, ok := p.tree.Get(s)
-		if !ok && s != "*" && len(route) == 1 && forName {
+		v, ok := p.tree.Get(k)
+		if !ok && k != "*" && len(route) == 1 && forName {
 			v, ok = p.tree.Get("*")
 		}
 
@@ -284,7 +280,7 @@ func (p Match) String() string {
 	return dns.Fqdn(strings.Join(names, "."))
 }
 
-func (p Match) append(q Match) Match {
+func (p Match) add(q Match) Match {
 	if len(p) == 0 {
 		return q
 	}
@@ -309,7 +305,7 @@ func (p Match) available() bool {
 
 func (p Match) match(qtype, qclass string) (labels Match) {
 	if nameLeaf := p[0]; nameLeaf.Down != nil {
-		labels = nameLeaf.Down.(*Node).match(x.Route{qtype, qclass}, false).append(p)
+		labels = nameLeaf.Down.(*Node).match(x.Route{qtype, qclass}, false).add(p)
 		if labels.available() {
 			switch qtype {
 			case "CNAME":
@@ -351,7 +347,7 @@ func (p Match) matchSOA(qclass string, nameError bool) Match {
 		if down := label.Down; down != nil {
 			q := down.(*Node).match(x.Route{"SOA", qclass}, false)
 			if q.available() {
-				q = q.append(p[i:])
+				q = q.add(p[i:])
 				q.addSOA(nameError)
 				return q
 			}
@@ -366,7 +362,7 @@ func (p Match) matchNS(qclass string, delegated bool) Match {
 		if down := label.Down; down != nil {
 			q := down.(*Node).match(x.Route{"NS", qclass}, false)
 			if q.available() {
-				q = q.append(p[i:])
+				q = q.add(p[i:])
 				q.addGlue(delegated)
 				return q
 			}
@@ -381,7 +377,7 @@ func (p Match) matchCNAME(qtype, qclass string) Match {
 		return p
 	}
 
-	q := p[0].Down.(*Node).match(x.Route{"CNAME", qclass}, false).append(p)
+	q := p[0].Down.(*Node).match(x.Route{"CNAME", qclass}, false).add(p)
 	if q.available() && qtype != "CNAME" {
 		q.addCNAME(qtype)
 	}

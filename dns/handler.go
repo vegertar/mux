@@ -205,4 +205,5 @@ var (
 	NameErrorHandler    = ErrorHandler(dns.RcodeNameError)
 	FormatErrorHandler  = ErrorHandler(dns.RcodeFormatError)
 	RefusedErrorHandler = ErrorHandler(dns.RcodeRefused)
+	FailureErrorHandler = ErrorHandler(dns.RcodeServerFailure)
 )

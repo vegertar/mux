@@ -8,7 +8,7 @@ import (
 // Node uses trie tree to store and search route components.
 type Node struct {
 	tree *radix.Tree
-	up   *x.Value
+	up   *x.Label
 }
 
 // NewNode creates a node instance.
@@ -29,13 +29,15 @@ func (p *Node) Empty() bool {
 }
 
 // Delete implements the `x.Node` interface.
-func (p *Node) Delete(key radix.Key) {
-	p.tree.Delete(key)
+func (p *Node) Delete(label *x.Label) {
+	p.tree.Delete(label.Key)
 }
 
 // Make implements the `x.Node` interface.
-func (p *Node) Make(route x.Route) (leaf *x.Value, err error) {
+func (p *Node) Make(route x.Route) (*x.Label, error) {
 	node := p
+	var leaf *x.Label
+
 	for _, k := range route {
 		if leaf != nil {
 			if leaf.Down == nil {
@@ -49,7 +51,8 @@ func (p *Node) Make(route x.Route) (leaf *x.Value, err error) {
 
 		leaf = node.find(k)
 		if leaf == nil {
-			leaf = new(x.Value)
+			leaf = new(x.Label)
+			leaf.Key = k
 			leaf.Node = node
 			node.tree.Insert(k, leaf)
 		}
@@ -59,8 +62,8 @@ func (p *Node) Make(route x.Route) (leaf *x.Value, err error) {
 }
 
 // Get implements the `x.Node` interface.
-func (p *Node) Get(route x.Route) *x.Value {
-	var leaf *x.Value
+func (p *Node) Get(route x.Route) *x.Label {
+	var leaf *x.Label
 
 	node := p
 	for _, k := range route {
@@ -82,24 +85,27 @@ func (p *Node) Get(route x.Route) *x.Value {
 }
 
 // Match implements the `x.Node` interface.
-func (p *Node) Match(route x.Route) x.Value {
-	var leaf x.Value
+func (p *Node) Match(route x.Route) x.Label {
+	var leaf x.Label
 	leaf.Node = p
 
 	if len(route) > 0 {
-		for _, v := range p.tree.Match(route[0]) {
-			value := v.Value.(*x.Value)
-			if value.Down != nil && len(route) > 1 {
-				x := value.Down.Match(route[1:])
-				if len(x.Handler) > 0 {
-					leaf.Handler = append(leaf.Handler, x.Handler...)
-				}
-				leaf.Middleware = append(middleware, x.Middleware...)
+		k := route[0]
+		if len(route) == 1 {
+			leaf.Key = k
+		}
+		for _, v := range p.tree.Match(k) {
+			label := v.Value.(*x.Label)
+			if label.Down != nil && len(route) > 1 {
+				value := label.Down.Match(route[1:])
+				leaf.Key = value.Key
+				leaf.Handler = append(leaf.Handler, value.Handler...)
+				leaf.Middleware = append(leaf.Middleware, value.Middleware...)
 			} else if len(route) == 1 {
-				if len(value.Handler) > 0 {
-					leaf.Handler = append(leaf.Handler, value.Handler...)
-				}
-				leaf.Middleware = append(middleware, value.Middleware...)
+				leaf.Handler = append(leaf.Handler, label.Handler...)
+				leaf.Middleware = append(leaf.Middleware, label.Middleware...)
+			} else {
+				leaf.Middleware = append(leaf.Middleware, label.Middleware...)
 			}
 		}
 	}
@@ -119,13 +125,6 @@ func (p *Node) Leaves() []*x.Label {
 		}
 		return false
 	})
-	for _, label := range p.labels {
-		if label.Down != nil {
-			out = append(out, label.Down.Leaves()...)
-		} else {
-			out = append(out, label)
-		}
-	}
 
 	return out
 }

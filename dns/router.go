@@ -25,39 +25,43 @@ func (p *Router) Routes() []Route {
 
 	for _, route := range p.Router.Routes() {
 		var r Route
-		r.Class = route[len(route)-1]
+		names := route[0].Strings()
+		reverse(names)
+		r.Name = strings.Join(names, ".")
+
 		if len(route) > 1 {
-			r.Type = route[len(route)-2]
+			r.Class = route[1].StringWith("")
 		}
 		if len(route) > 2 {
-			names := route[:len(route)-2]
-			reverse(names)
-			r.Name = strings.Join(names, ".")
+			r.Type = route[2].StringWith("")
 		}
+
 		out = append(out, r)
 	}
 
 	return out
 }
 
-func (p *Router) Match(r Route) Handler {
-	return newHandlerFromLabel(p.Router.Match(r.Strings()))
+func (p *Router) Match(c Route) Handler {
+	r, err := newRoute(c)
+	if err != nil {
+		return FailureErrorHandler
+	}
+	return newHandlerFromLabel(p.Router.Match(r))
 }
 
-func (p *Router) Use(r Route, m ...Middleware) (x.CloseFunc, error) {
+func (p *Router) Use(c Route, m ...Middleware) (x.CloseFunc, error) {
+	r, err := newRoute(c)
+	if err != nil {
+		return nil, err
+	}
+
 	m2 := make([]interface{}, 0, len(m))
 	for _, v := range m {
 		m2 = append(m2, v)
 	}
 
-	s := r.Strings()
-	if r.Type == "" {
-		s = s[:len(s)-2]
-	} else if r.Class == "" {
-		s = s[:len(s)-1]
-	}
-
-	return p.Router.Use(s, m2...)
+	return p.Router.Use(r, m2...)
 }
 
 func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
@@ -68,8 +72,12 @@ func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
 	return p.Use(r, m2...)
 }
 
-func (p *Router) Handle(r Route, h Handler) (x.CloseFunc, error) {
-	return p.Router.Handle(r.Strings(), h)
+func (p *Router) Handle(c Route, h Handler) (x.CloseFunc, error) {
+	r, err := newRoute(c)
+	if err != nil {
+		return nil, err
+	}
+	return p.Router.Handle(r, h)
 }
 
 func (p *Router) HandleFunc(r Route, h HandlerFunc) (x.CloseFunc, error) {
@@ -81,6 +89,7 @@ func (p *Router) ServeDNS(w ResponseWriter, req *Request) {
 	r.Class = dns.ClassToString[req.Question[0].Qclass]
 	r.Type = dns.TypeToString[req.Question[0].Qtype]
 	r.Name = req.Question[0].Name
+	r.UseLiteral = true
 
 	var h Handler
 	if r.Class == "ANY" || r.Class == "" || r.Type == "ANY" || r.Type == "" {
@@ -92,6 +101,7 @@ func (p *Router) ServeDNS(w ResponseWriter, req *Request) {
 	h.ServeDNS(w, req)
 	if rw, ok := w.(*responseWriter); ok && !rw.written {
 		if err := rw.WriteMsg(req.Msg); err != nil {
+			// TODO: no panic
 			panic(err)
 		}
 	}
