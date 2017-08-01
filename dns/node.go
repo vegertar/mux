@@ -9,79 +9,14 @@ import (
 )
 
 type Node struct {
-	tree *radix.Tree
-	up   *x.Label
+	*x.RadixNode
 }
 
-func NewNode() *Node {
-	return &Node{
-		tree: radix.New(),
-	}
-}
-
-func (p *Node) Up() *x.Label {
-	return p.up
-}
-
-func (p *Node) Empty() bool {
-	return p.tree.Len() == 0
-}
-
-func (p *Node) Delete(label *x.Label) {
-	p.tree.Delete(label.Key)
-}
-
-func (p *Node) Make(route x.Route) (leaf *x.Label, err error) {
-	node := p
-	for _, k := range route {
-		if leaf != nil {
-			if leaf.Down == nil {
-				down := NewNode()
-				down.up = leaf
-
-				leaf.Down = down
-			}
-			node = leaf.Down.(*Node)
-		}
-
-		leaf = node.find(k)
-		if leaf == nil {
-			leaf = new(x.Label)
-			leaf.Key = k
-			leaf.Node = node
-			node.tree.Insert(k, leaf)
-		}
-	}
-
-	return
-}
-
-func (p *Node) Get(route x.Route) *x.Label {
-	var leaf *x.Label
-
-	node := p
-	for _, k := range route {
-		if leaf != nil {
-			node = leaf.Down.(*Node)
-			leaf = nil
-		}
-
-		if node != nil {
-			leaf = node.find(k)
-		}
-
-		if leaf == nil {
-			break
-		}
-	}
-
-	return leaf
-}
-
+// Match implements the `x.Node` interface.
 func (p *Node) Match(route x.Route) x.Label {
 	var labels Match
 	if len(route) > 2 {
-		qname, qtype, qclass := route[:len(route)-2], route[len(route)-2], route[len(route)-1]
+		qname, qtype, qclass := route[0], route[1], route[2]
 		if match := p.match(qname, true); len(match) != 0 {
 			labels = match.match(qtype, qclass)
 		}
@@ -204,10 +139,8 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 func (p *Node) match(route x.Route, forName bool) (labels Match) {
 	if len(route) > 0 {
 		k := route[0]
-		label, _ := x.NewLiteralLabel(k)
-
-		v, ok := p.tree.Get(k)
-		if !ok && k != "*" && len(route) == 1 && forName {
+		v := p.Get(k, false)
+		if v == nil && k != "*" && len(route) == 1 && forName {
 			v, ok = p.tree.Get("*")
 		}
 
@@ -227,47 +160,6 @@ func (p *Node) match(route x.Route, forName bool) (labels Match) {
 	}
 
 	return
-}
-
-func (p *Node) Leaves() []*x.Label {
-	var out []*x.Label
-	p.tree.Walk(func(s string, v interface{}) bool {
-		label := v.(*x.Label)
-		if label.Down != nil {
-			out = append(out, label.Down.Leaves()...)
-		} else {
-			out = append(out, label)
-		}
-		return false
-	})
-
-	return out
-}
-
-func (p *Node) walk(depth int, f func(int, *x.Label)) {
-	var next []*Node
-	p.tree.Walk(func(s string, v interface{}) bool {
-		label := v.(*x.Label)
-		f(depth, label)
-		if label.Down != nil {
-			next = append(next, label.Down.(*Node))
-		}
-		return false
-	})
-
-	for _, node := range next {
-		node.walk(depth+1, f)
-	}
-}
-
-func (p *Node) find(s string) *x.Label {
-	if !p.Empty() {
-		if v, ok := p.tree.Get(s); ok {
-			return v.(*x.Label)
-		}
-	}
-
-	return nil
 }
 
 type Match []x.Label
@@ -303,7 +195,7 @@ func (p Match) available() bool {
 	return len(p) != 0 && len(p[0].Handler) != 0
 }
 
-func (p Match) match(qtype, qclass string) (labels Match) {
+func (p Match) match(qtype, qclass radix.Key) (labels Match) {
 	if nameLeaf := p[0]; nameLeaf.Down != nil {
 		labels = nameLeaf.Down.(*Node).match(x.Route{qtype, qclass}, false).add(p)
 		if labels.available() {

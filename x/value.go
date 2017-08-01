@@ -8,3 +8,7 @@ type Value struct {
 	Node       Node
 	Down       Node
 }
+
+func (v Value) Trivial() bool {
+	return len(v.Handler) == 0 && len(v.Middleware) == 0 && v.Down == nil
+}

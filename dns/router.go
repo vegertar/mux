@@ -15,7 +15,11 @@ type Router struct {
 func NewRouter() *Router {
 	return &Router{
 		Router: &x.Router{
-			Node: NewNode(),
+			Breed: func(up *x.Label) x.Node {
+				return &Node{
+					RadixNode: x.NewRadixNode(up),
+				}
+			},
 		},
 	}
 }
@@ -30,10 +34,10 @@ func (p *Router) Routes() []Route {
 		r.Name = strings.Join(names, ".")
 
 		if len(route) > 1 {
-			r.Class = route[1].StringWith("")
+			r.Class = route[1][0].String()
 		}
 		if len(route) > 2 {
-			r.Type = route[2].StringWith("")
+			r.Type = route[2][0].String()
 		}
 
 		out = append(out, r)

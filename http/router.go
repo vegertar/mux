@@ -17,7 +17,7 @@ type Router struct {
 func NewRouter() *Router {
 	return &Router{
 		Router: &x.Router{
-			Node: NewNode(),
+			Breed: x.NewRadixNode,
 		},
 	}
 }
@@ -28,9 +28,9 @@ func (p *Router) Routes() []Route {
 
 	for _, route := range p.Router.Routes() {
 		var r Route
-		r.Scheme = route[0].StringWith("")
+		r.Scheme = route[0][0].String()
 		if len(route) > 1 {
-			r.Method = route[1].StringWith("")
+			r.Method = route[1][0].String()
 		}
 		if len(route) > 2 {
 			r.Host = route[2].StringWith(".")

@@ -21,14 +21,20 @@ type (
 	// After the first call, subsequent calls to a CloseFunc do nothing.
 	CloseFunc func()
 
+	// BreedFunc creates a node under the given label.
+	BreedFunc func(up *Label) Node
+
 	// Route is a matching sequence for muxing request, e.g. an array of `scheme`, `method`, `path`, etc.
 	Route []radix.Key
 
 	// Router is a root node of mux and carries a few options.
 	Router struct {
-		Node
+		Breed           BreedFunc
 		DisableDupRoute bool
+
+		// TODO: optimizing mutex
 		mu              sync.RWMutex
+		tree            Node
 	}
 )
 
@@ -37,9 +43,13 @@ func (p *Router) Routes() []Route {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if p.tree == nil {
+		return nil
+	}
+
 	var out []Route
 
-	for _, leaf := range p.Node.Leaves() {
+	for _, leaf := range p.tree.Leaves() {
 		var layers []radix.Key
 		for leaf != nil {
 			if len(leaf.Handler) > 0 || len(leaf.Middleware) > 0 {
@@ -56,12 +66,16 @@ func (p *Router) Routes() []Route {
 	return out
 }
 
-// Match matches a route and returnes an associated label if possible.
+// Match matches a route and returns an associated label if possible.
 func (p *Router) Match(r Route) Label {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return p.Node.Match(r)
+	if p.tree == nil {
+		return Label{}
+	}
+
+	return p.tree.Match(r)
 }
 
 // Use associates a route with middleware.
@@ -69,7 +83,9 @@ func (p *Router) Use(r Route, m ...interface{}) (CloseFunc, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	leaf, err := p.Node.Make(r)
+	p.init()
+
+	leaf, err := p.tree.Make(r, p.Breed)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +110,7 @@ func (p *Router) Use(r Route, m ...interface{}) (CloseFunc, error) {
 				}
 
 				if index != -1 {
-					leaf.Middleware = append(leaf.Middleware[:index], leaf.Middleware[index+1:]...)
+					leaf.Middleware = append(leaf.Middleware[:index], leaf.Middleware[index + 1:]...)
 				}
 			}
 
@@ -109,7 +125,9 @@ func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	leaf, err := p.Node.Make(r)
+	p.init()
+
+	leaf, err := p.tree.Make(r, p.Breed)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +156,7 @@ func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 				}
 
 				if index != -1 {
-					leaf.Handler = append(leaf.Handler[:index], leaf.Handler[index+1:]...)
+					leaf.Handler = append(leaf.Handler[:index], leaf.Handler[index + 1:]...)
 				}
 			}
 
@@ -148,13 +166,19 @@ func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 }
 
 // free deletes a trivial route from down to up recursively.
-func (p *Router) free(leaf *Value) {
-	for leaf != nil && len(leaf.Middleware) == 0 && len(leaf.Handler) == 0 {
+func (p *Router) free(leaf *Label) {
+	for leaf != nil && leaf.Trivial() {
 		node := leaf.Node
 		node.Delete(leaf)
 		if !node.Empty() {
 			break
 		}
 		leaf = node.Up()
+	}
+}
+
+func (p *Router) init() {
+	if p.tree == nil {
+		p.tree = p.Breed(nil)
 	}
 }

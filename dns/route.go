@@ -57,25 +57,10 @@ func newRoute(r Route) (x.Route, error) {
 	// so we append an empty label here for intercepting the root label.
 	name = append(name, "")
 	reverse(name)
-
-	for _, s := range name {
-		var (
-			label radix.Label
-			err   error
-		)
-
-		// Since wildcard records are different from HTTP hostname,
-		// so we treat it as a string literal.
-		// For matching any characters, please use double asterisks (**) instead.
-		if s == "*" {
-			label, err = x.NewLiteralLabel(s)
-		} else {
-			label, err = f(s)
-		}
-		if err != nil {
-			return nil, err
-		}
-		key = append(key, label)
+4
+	key, err = f(name)
+	if err != nil {
+		return nil, err
 	}
 	v = append(v, key)
 
@@ -84,12 +69,18 @@ func newRoute(r Route) (x.Route, error) {
 	} else {
 		key, err = f(aType)
 	}
+	if err != nil {
+		return nil, err
+	}
 	v = append(v, key)
 
 	if len(r.Class) > 0 {
 		key, err = f([]string{strings.ToUpper(r.Class)})
 	} else {
 		key, err = f(inClass)
+	}
+	if err != nil {
+		return nil, err
 	}
 	v = append(v, key)
 
