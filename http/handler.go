@@ -70,13 +70,21 @@ func newMultiHandler(handler ...interface{}) MultiHandler {
 	return MultiHandler(m)
 }
 
-func newHandlerFromLabel(label x.Label) http.Handler {
-	h := notFound
-	if len(label.Handler) != 0 {
-		h = newMultiHandler(label.Handler...)
+func newHandlerFromLabels(labels []x.Label) http.Handler {
+	var (
+		h = notFound
+
+		handlers []interface{}
+		middleware []interface{}
+	)
+	for _, label := range labels {
+		handlers = append(handlers, label.Handler...)
+		middleware = append(middleware, label.Middleware...)
+	}
+	if len(handlers) > 0 {
+		h = newMultiHandler(handlers...)
 	}
 
-	middleware := label.Middleware
 	for i := range middleware {
 		h = middleware[len(middleware)-1-i].(Middleware).GenerateHandler(h)
 	}

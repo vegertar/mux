@@ -13,22 +13,57 @@ type Node struct {
 }
 
 // Match implements the `x.Node` interface.
-func (p *Node) Match(route x.Route) x.Label {
-	var labels Match
+func (p *Node) Match(route x.Route) (leaves []x.Label) {
 	if len(route) > 2 {
-		qname, qtype, qclass := route[0], route[1], route[2]
-		if match := p.match(qname, true); len(match) != 0 {
-			labels = match.match(qtype, qclass)
+		// first matches qname only
+		nameLeaves := p.RadixNode.Match(route[:1])
+		for _, nameLeaf := range nameLeaves {
+			// then matches qtype and qclass
+			v := nameLeaf.Node.Match(route[1:])
+			if len(v) == 0 {
+				nameLeaf.Handler = append(nameLeaf.Handler, NoErrorHandler)
+				leaves = append(leaves, nameLeaf)
+			} else {
+				for _, leaf := range v {
+					up := leaf.Node.Up()
+					qtype := up.Key[0].String()
+					if len(leaf.Handler) > 0 {
+						switch qtype {
+						case "CNAME":
+							// no needs to follow name
+						case "NS":
+							labels.addGlue(false)
+						case "SOA":
+							labels.addSOA(false)
+						default:
+							labels.addCNAME(qtype)
+						}
+					} else {
+						// domain is existed, but no exactly matched data
+						switch qtype {
+						case "CNAME", "NS":
+							// no needs to match again
+						case "SOA":
+							labels = m[1:].matchSOA(qclass, false)
+						default:
+							labels = m.matchCNAME(qtype, qclass)
+							if !labels.available() {
+								labels = m.matchNS(qclass, true)
+							}
+						}
+
+						if !labels.available() && qtype != "SOA" {
+							labels = m.matchSOA(qclass, false)
+						}
+					}
+				}
+			}
 		}
-	} else {
-		labels = p.match(route, false)
+
+		return
 	}
 
-	if len(labels) != 0 {
-		return labels[0]
-	}
-
-	return x.Label{}
+	return p.RadixNode.Match(route)
 }
 
 func (p *Node) cnameMiddleware(qtype string) Middleware {
@@ -37,9 +72,9 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 			return h
 		}
 
-		return HandlerFunc(func(w ResponseWriter, r *Request) {
+		return HandlerFunc(func(w ResponseWriter, req *Request) {
 			cnameWriter := &responseWriter{}
-			h.ServeDNS(cnameWriter, r)
+			h.ServeDNS(cnameWriter, req)
 
 			recursiveWriter := &responseWriter{}
 			recursiveQuestion := &Request{Msg: new(dns.Msg)}
@@ -50,14 +85,21 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 					continue
 				}
 
-				route := Name(ns.Target)
-				route.Type = qtype
-				recursiveQuestion.SetQuestion(ns.Target, r.Question[0].Qtype)
-				newHandlerFromLabel(p.Match(x.Route(route.Strings()))).ServeDNS(recursiveWriter, recursiveQuestion)
+				r := Name(ns.Target)
+				r.UseLiteral = true
+				r.Type = qtype
+
+				route, err := newRoute(r)
+				if err != nil {
+					panic(err)
+				}
+
+				recursiveQuestion.SetQuestion(ns.Target, req.Question[0].Qtype)
+				newHandlerFromLabels(p.Match(route)).ServeDNS(recursiveWriter, recursiveQuestion)
 			}
 
 			cnameWriter.WriteMsg(&recursiveWriter.msg)
-			cnameWriter.WriteMsg(r.Msg)
+			cnameWriter.WriteMsg(req.Msg)
 			w.WriteMsg(&cnameWriter.msg)
 		})
 	})
@@ -65,21 +107,28 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 
 func (p *Node) soaMiddleware(nameError bool) Middleware {
 	return MiddlewareFunc(func(h Handler) Handler {
-		return HandlerFunc(func(w ResponseWriter, r *Request) {
+		return HandlerFunc(func(w ResponseWriter, req *Request) {
 			soaWriter := &responseWriter{}
-			h.ServeDNS(soaWriter, r)
+			h.ServeDNS(soaWriter, req)
 
 			if len(soaWriter.msg.Ns) == 0 && len(soaWriter.msg.Answer) > 0 {
 				if soa, ok := soaWriter.msg.Answer[0].(*dns.SOA); ok {
-					if soa.Hdr.Name == r.Msg.Question[0].Name {
+					if soa.Hdr.Name == req.Msg.Question[0].Name {
 						// adding NS records for an original name
 						nsWriter := &responseWriter{}
 						nsQuestion := &Request{Msg: new(dns.Msg)}
-						nsQuestion.SetQuestion(r.Msg.Question[0].Name, dns.TypeNS)
+						nsQuestion.SetQuestion(req.Msg.Question[0].Name, dns.TypeNS)
 
-						route := Name(r.Msg.Question[0].Name)
-						route.Type = "NS"
-						newHandlerFromLabel(p.Match(x.Route(route.Strings()))).ServeDNS(nsWriter, nsQuestion)
+						r := Name(req.Msg.Question[0].Name)
+						r.UseLiteral = true
+						r.Type = "NS"
+
+						route, err := newRoute(r)
+						if err != nil {
+							panic(err)
+						}
+
+						newHandlerFromLabels(p.Match(route)).ServeDNS(nsWriter, nsQuestion)
 
 						soaWriter.Ns(nsWriter.msg.Answer...)
 						soaWriter.Extra(nsWriter.msg.Extra...)
@@ -89,7 +138,7 @@ func (p *Node) soaMiddleware(nameError bool) Middleware {
 				}
 			}
 
-			soaWriter.WriteMsg(r.Msg)
+			soaWriter.WriteMsg(req.Msg)
 			if nameError {
 				w.Header().Rcode = dns.RcodeNameError
 			}
@@ -100,28 +149,37 @@ func (p *Node) soaMiddleware(nameError bool) Middleware {
 
 func (p *Node) glueMiddleware(delegated bool) Middleware {
 	return MiddlewareFunc(func(h Handler) Handler {
-		return HandlerFunc(func(w ResponseWriter, r *Request) {
+		return HandlerFunc(func(w ResponseWriter, req *Request) {
 			nsWriter := &responseWriter{}
-			h.ServeDNS(nsWriter, r)
+			h.ServeDNS(nsWriter, req)
 
 			glueWriter := &responseWriter{}
 			glueQuestion := &Request{Msg: new(dns.Msg)}
 
-			for _, r := range append(nsWriter.msg.Answer, nsWriter.msg.Ns...) {
-				ns, ok := r.(*dns.NS)
+			for _, rr := range append(nsWriter.msg.Answer, nsWriter.msg.Ns...) {
+				ns, ok := rr.(*dns.NS)
 				if !ok {
 					continue
 				}
 
-				route := Name(ns.Ns)
+				r := Name(ns.Ns)
+				r.UseLiteral = true
 
 				glueQuestion.SetQuestion(ns.Ns, dns.TypeA)
-				route.Type = "A"
-				newHandlerFromLabel(p.Match(x.Route(route.Strings()))).ServeDNS(glueWriter, glueQuestion)
+				r.Type = "A"
+				route, err := newRoute(r)
+				if err != nil {
+					panic(err)
+				}
+				newHandlerFromLabels(p.Match(route)).ServeDNS(glueWriter, glueQuestion)
 
 				glueQuestion.SetQuestion(ns.Ns, dns.TypeAAAA)
-				route.Type = "AAAA"
-				newHandlerFromLabel(p.Match(x.Route(route.Strings()))).ServeDNS(glueWriter, glueQuestion)
+				r.Type = "AAAA"
+				route, err = newRoute(r)
+				if err != nil {
+					panic(err)
+				}
+				newHandlerFromLabels(p.Match(route)).ServeDNS(glueWriter, glueQuestion)
 			}
 
 			if delegated {
@@ -130,60 +188,26 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 			}
 
 			nsWriter.Extra(glueWriter.msg.Answer...)
-			nsWriter.WriteMsg(r.Msg)
+			nsWriter.WriteMsg(req.Msg)
 			w.WriteMsg(&nsWriter.msg)
 		})
 	})
 }
 
-func (p *Node) match(route x.Route, forName bool) (labels Match) {
-	if len(route) > 0 {
-		k := route[0]
-		v := p.Get(k, false)
-		if v == nil && k != "*" && len(route) == 1 && forName {
-			v, ok = p.tree.Get("*")
-		}
-
-		if ok {
-			label = v.(*x.Label)
-
-			if label.Down != nil && len(route) > 1 {
-				labels = label.Down.(*Node).match(route[1:], forName)
-				if len(labels) != 0 {
-					last := &labels[len(labels)-1]
-					last.Middleware = append(label.Middleware, last.Middleware...)
-				}
-			}
-		}
-
-		labels = append(labels, *label)
-	}
-
-	return
-}
-
 type Match []x.Label
 
-func (p Match) String() string {
-	names := make([]string, 0, len(p))
-	for _, label := range p {
-		names = append(names, label.String())
-	}
-	return dns.Fqdn(strings.Join(names, "."))
-}
-
-func (p Match) add(q Match) Match {
-	if len(p) == 0 {
+func (m Match) add(q Match) Match {
+	if len(m) == 0 {
 		return q
 	}
 	if len(q) == 0 {
 		return q
 	}
 
-	v := append(p, q...)
+	v := append(m, q...)
 	leaf := q[0]
-	for i := range p {
-		label := p[i]
+	for i := range m {
+		label := m[i]
 		label.Middleware = append(leaf.Middleware, label.Middleware...)
 		v[i] = label
 	}
@@ -191,17 +215,17 @@ func (p Match) add(q Match) Match {
 	return v
 }
 
-func (p Match) available() bool {
-	return len(p) != 0 && len(p[0].Handler) != 0
+func (m Match) available() bool {
+	return len(m) != 0 && len(m[0].Handler) != 0
 }
 
-func (p Match) match(qtype, qclass radix.Key) (labels Match) {
-	if nameLeaf := p[0]; nameLeaf.Down != nil {
-		labels = nameLeaf.Down.(*Node).match(x.Route{qtype, qclass}, false).add(p)
+func (m Match) match(qtype, qclass radix.Key) (labels Match) {
+	if nameLeaf := m[0]; nameLeaf.Down != nil {
+		labels = nameLeaf.Down.Match(x.Route{qtype, qclass}, false).add(m)
 		if labels.available() {
 			switch qtype {
 			case "CNAME":
-				// no needs to follow name
+			// no needs to follow name
 			case "NS":
 				labels.addGlue(false)
 			case "SOA":
@@ -213,63 +237,63 @@ func (p Match) match(qtype, qclass radix.Key) (labels Match) {
 			// domain is existed, but no exactly matched data
 			switch qtype {
 			case "CNAME", "NS":
-				// no needs to match again
+			// no needs to match again
 			case "SOA":
-				labels = p[1:].matchSOA(qclass, false)
+				labels = m[1:].matchSOA(qclass, false)
 			default:
-				labels = p.matchCNAME(qtype, qclass)
+				labels = m.matchCNAME(qtype, qclass)
 				if !labels.available() {
-					labels = p.matchNS(qclass, true)
+					labels = m.matchNS(qclass, true)
 				}
 			}
 
 			if !labels.available() && qtype != "SOA" {
-				labels = p.matchSOA(qclass, false)
+				labels = m.matchSOA(qclass, false)
 			}
 		}
 	} else {
-		labels = p.matchSOA(qclass, true)
+		labels = m.matchSOA(qclass, true)
 	}
 
 	return
 }
 
-func (p Match) matchSOA(qclass string, nameError bool) Match {
-	for i, label := range p {
+func (m Match) matchSOA(qclass string, nameError bool) Match {
+	for i, label := range m {
 		if down := label.Down; down != nil {
 			q := down.(*Node).match(x.Route{"SOA", qclass}, false)
 			if q.available() {
-				q = q.add(p[i:])
+				q = q.add(m[i:])
 				q.addSOA(nameError)
 				return q
 			}
 		}
 	}
 
-	return p
+	return m
 }
 
-func (p Match) matchNS(qclass string, delegated bool) Match {
-	for i, label := range p {
+func (m Match) matchNS(qclass string, delegated bool) Match {
+	for i, label := range m {
 		if down := label.Down; down != nil {
 			q := down.(*Node).match(x.Route{"NS", qclass}, false)
 			if q.available() {
-				q = q.add(p[i:])
+				q = q.add(m[i:])
 				q.addGlue(delegated)
 				return q
 			}
 		}
 	}
 
-	return p
+	return m
 }
 
-func (p Match) matchCNAME(qtype, qclass string) Match {
-	if len(p) == 0 || p[0].Down == nil {
-		return p
+func (m Match) matchCNAME(qtype, qclass string) Match {
+	if len(m) == 0 || m[0].Down == nil {
+		return m
 	}
 
-	q := p[0].Down.(*Node).match(x.Route{"CNAME", qclass}, false).add(p)
+	q := m[0].Down.(*Node).match(x.Route{"CNAME", qclass}, false).add(m)
 	if q.available() && qtype != "CNAME" {
 		q.addCNAME(qtype)
 	}
@@ -277,23 +301,23 @@ func (p Match) matchCNAME(qtype, qclass string) Match {
 	return q
 }
 
-func (p Match) addSOA(nameError bool) {
-	root := p[len(p)-1].Node.(*Node)
+func (m Match) addSOA(nameError bool) {
+	root := m[len(m) - 1].Node.(*Node)
 	soaMiddleware := root.soaMiddleware(nameError)
-	leaf := &p[0]
+	leaf := &m[0]
 	leaf.Middleware = append([]interface{}{soaMiddleware}, leaf.Middleware...)
 }
 
-func (p Match) addGlue(delegated bool) {
-	root := p[len(p)-1].Node.(*Node)
+func (m Match) addGlue(delegated bool) {
+	root := m[len(m) - 1].Node.(*Node)
 	glueMiddleware := root.glueMiddleware(delegated)
-	leaf := &p[0]
+	leaf := &m[0]
 	leaf.Middleware = append([]interface{}{glueMiddleware}, leaf.Middleware...)
 }
 
-func (p Match) addCNAME(qtype string) {
-	root := p[len(p)-1].Node.(*Node)
+func (m Match) addCNAME(qtype string) {
+	root := m[len(m) - 1].Node.(*Node)
 	cnameMiddleware := root.cnameMiddleware(qtype)
-	leaf := &p[0]
+	leaf := &m[0]
 	leaf.Middleware = append([]interface{}{cnameMiddleware}, leaf.Middleware...)
 }

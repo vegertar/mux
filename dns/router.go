@@ -51,7 +51,7 @@ func (p *Router) Match(c Route) Handler {
 	if err != nil {
 		return FailureErrorHandler
 	}
-	return newHandlerFromLabel(p.Router.Match(r))
+	return newHandlerFromLabels(p.Router.Match(r))
 }
 
 func (p *Router) Use(c Route, m ...Middleware) (x.CloseFunc, error) {

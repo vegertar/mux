@@ -110,6 +110,33 @@ func (k Key) Match(x Key) bool {
 	return false
 }
 
+// Is returns if key equals to given strings.
+func (k Key) Is(x ...string) bool {
+	if len(k) == len(x) {
+		for i, label := range k {
+			if !label.String() == x[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// Wildcard returns if key contains asterisk ('*') only.
+func (k Key) Wildcard() bool {
+	if len(k) > 0  {
+		for _, label := range k {
+			if s := label.String(); len(s) == 0 || strings.Trim(s, glob) != "" {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
+}
+
 // StringWith returns a string joined with the given separator.
 func (k Key) StringWith(separator string) string {
 	return strings.Join(k.Strings(), separator)

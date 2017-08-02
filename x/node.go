@@ -31,10 +31,8 @@ type Node interface {
 	// Empty returns if it is empty.
 	Empty() bool
 
-	// Match returns a label matched by given route.
-	// The returned label should contain all associated handlers and middleware
-	// while matching by BFS.
-	Match(route Route) Label
+	// Match returns all labels matched given route.
+	Match(route Route) []Label
 }
 
 // RadixNode uses radix tree to store and search route components.
@@ -88,32 +86,33 @@ func (p *RadixNode) Make(route Route, breed BreedFunc) (*Label, error) {
 }
 
 // Match implements the `Node` interface.
-func (p *RadixNode) Match(route Route) Label {
-	var leaf Label
-	leaf.Node = p
-
+func (p *RadixNode) Match(route Route) (leaves []Label) {
 	if len(route) > 0 {
 		k := route[0]
-		if len(route) == 1 {
-			leaf.Key = k
-		}
 		for _, v := range p.tree.Match(k) {
 			label := v.Value.(*Label)
-			if label.Down != nil && len(route) > 1 {
-				value := label.Down.Match(route[1:])
-				leaf.Key = value.Key
-				leaf.Handler = append(leaf.Handler, value.Handler...)
-				leaf.Middleware = append(leaf.Middleware, value.Middleware...)
-			} else if len(route) == 1 {
-				leaf.Handler = append(leaf.Handler, label.Handler...)
-				leaf.Middleware = append(leaf.Middleware, label.Middleware...)
-			} else {
-				leaf.Middleware = append(leaf.Middleware, label.Middleware...)
+			if len(route) > 1 && label.Down != nil {
+				leaves = append(leaves, label.Down.Match(route[1:])...)
+				continue
+			}
+
+			// check if label is a leaf
+			if len(route) == 1 || label.Down == nil && label.Key.Wildcard() {
+				leaves = append(leaves, *label)
+				continue
+			}
+
+			// remains as a middleware
+			if len(label.Middleware) > 0 {
+				x := *label
+				// clears unnecessary handlers
+				x.Handler = nil
+				leaves = append(leaves, x)
 			}
 		}
 	}
 
-	return leaf
+	return
 }
 
 // Leaves implements the `Node` interface.

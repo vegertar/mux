@@ -66,13 +66,13 @@ func (p *Router) Routes() []Route {
 	return out
 }
 
-// Match matches a route and returns an associated label if possible.
-func (p *Router) Match(r Route) Label {
+// Match matches a route and returns all associated labels.
+func (p *Router) Match(r Route) []Label {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
 	if p.tree == nil {
-		return Label{}
+		return nil
 	}
 
 	return p.tree.Match(r)

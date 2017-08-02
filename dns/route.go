@@ -57,7 +57,7 @@ func newRoute(r Route) (x.Route, error) {
 	// so we append an empty label here for intercepting the root label.
 	name = append(name, "")
 	reverse(name)
-4
+
 	key, err = f(name)
 	if err != nil {
 		return nil, err
