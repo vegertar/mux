@@ -1,17 +1,20 @@
-// Package dns implements a dns mux.
+// Package dns implements a DNS mux.
 package dns
 
 import (
+	"context"
 	"strings"
 
 	"github.com/miekg/dns"
 	"github.com/vegertar/mux/x"
 )
 
+// Router is a wrapper of DNS mux.
 type Router struct {
 	*x.Router
 }
 
+// NewRouter creates a DNS router.
 func NewRouter() *Router {
 	return &Router{
 		Router: &x.Router{
@@ -24,6 +27,7 @@ func NewRouter() *Router {
 	}
 }
 
+// Routes returns registered route sequences.
 func (p *Router) Routes() []Route {
 	var out []Route
 
@@ -46,6 +50,7 @@ func (p *Router) Routes() []Route {
 	return out
 }
 
+// Match returns an associated `http.Handle` by given route.
 func (p *Router) Match(c Route) Handler {
 	r, err := newRoute(c)
 	if err != nil {
@@ -54,6 +59,7 @@ func (p *Router) Match(c Route) Handler {
 	return newHandlerFromLabels(p.Router.Match(r))
 }
 
+// Use associates a route with middleware.
 func (p *Router) Use(c Route, m ...Middleware) (x.CloseFunc, error) {
 	r, err := newRoute(c)
 	if err != nil {
@@ -68,6 +74,7 @@ func (p *Router) Use(c Route, m ...Middleware) (x.CloseFunc, error) {
 	return p.Router.Use(r, m2...)
 }
 
+// UseFunc associates a route with middleware functions.
 func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
 	m2 := make([]Middleware, 0, len(m))
 	for _, v := range m {
@@ -76,6 +83,7 @@ func (p *Router) UseFunc(r Route, m ...MiddlewareFunc) (x.CloseFunc, error) {
 	return p.Use(r, m2...)
 }
 
+// Handle associates a route with a `Handler`.
 func (p *Router) Handle(c Route, h Handler) (x.CloseFunc, error) {
 	r, err := newRoute(c)
 	if err != nil {
@@ -84,10 +92,12 @@ func (p *Router) Handle(c Route, h Handler) (x.CloseFunc, error) {
 	return p.Router.Handle(r, h)
 }
 
+// HandleFunc associates a route with an `HandlerFunc`.
 func (p *Router) HandleFunc(r Route, h HandlerFunc) (x.CloseFunc, error) {
 	return p.Handle(r, h)
 }
 
+// ServeDNS implements `Handler` interface.
 func (p *Router) ServeDNS(w ResponseWriter, req *Request) {
 	var r Route
 	r.Class = dns.ClassToString[req.Question[0].Qclass]
@@ -103,10 +113,13 @@ func (p *Router) ServeDNS(w ResponseWriter, req *Request) {
 	}
 
 	h.ServeDNS(w, req)
-	if rw, ok := w.(*responseWriter); ok && !rw.written {
-		if err := rw.WriteMsg(req.Msg); err != nil {
-			// TODO: no panic
-			panic(err)
-		}
+}
+
+// ServeFunc returns a `dns.HandlerFunc`.
+func (p *Router) ServeFunc(ctx context.Context) dns.HandlerFunc {
+	return func(w dns.ResponseWriter, r *dns.Msg) {
+		localCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		p.ServeDNS(&responseWriter{ResponseWriter: w}, &Request{Msg: r, ctx: localCtx})
 	}
 }

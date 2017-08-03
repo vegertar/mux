@@ -10,20 +10,25 @@ import (
 )
 
 var (
-	aType   = []string{"A"}
-	inClass = []string{"IN"}
+	nsType    = []string{"NS"}
+	soaType   = []string{"SOA"}
+	cnameType = []string{"CNAME"}
+	aType     = []string{"A"}
+	inClass   = []string{"IN"}
 )
 
+// Route is the DNS route component configure.
 type Route struct {
-	Name       string `json:"name,omitempty"`
-	Type       string `json:"type,omitempty"`
-	Class      string `json:"class,omitempty"`
+	Name       string `json:"name,omitempty" default:"."`
+	Type       string `json:"type,omitempty" default:"A"`
+	Class      string `json:"class,omitempty" default:"IN"`
 	UseLiteral bool   `json:"useLiteral,omitempty"`
 }
 
+// String returns the string representation.
 func (r Route) String() string {
-	name, typ, class := r.Name, r.Type, r.Class
-	if len(r.Name) {
+	name, typ, class := ".", "A", "IN"
+	if len(r.Name) > 0 {
 		name = strings.ToLower(r.Name)
 	}
 	if len(r.Type) > 0 {
@@ -87,6 +92,7 @@ func newRoute(r Route) (x.Route, error) {
 	return v, nil
 }
 
+// RR creates a route from RR records.
 func RR(r dns.RR) Route {
 	return Route{
 		Name:  strings.ToLower(r.Header().Name),
@@ -95,6 +101,7 @@ func RR(r dns.RR) Route {
 	}
 }
 
+// Name creates a route from a domain name with default type A and class IN.
 func Name(s string) Route {
 	return Route{
 		Name: strings.ToLower(s),

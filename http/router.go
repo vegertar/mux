@@ -17,7 +17,9 @@ type Router struct {
 func NewRouter() *Router {
 	return &Router{
 		Router: &x.Router{
-			Breed: x.NewRadixNode,
+			Breed: func(up *x.Label) x.Node {
+				return x.NewRadixNode(up),
+			},
 		},
 	}
 }

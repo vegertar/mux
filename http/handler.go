@@ -42,7 +42,7 @@ func (p *ResponseWriter) Written() bool {
 	return atomic.LoadInt32(&p.written) == 1
 }
 
-// MultiHandler is a wrapper of multiple http handlers.
+// MultiHandler is a wrapper of multiple HTTP handlers.
 type MultiHandler []http.Handler
 
 // ServeHTTP implements the `http.Handler` interface.
@@ -74,7 +74,7 @@ func newHandlerFromLabels(labels []x.Label) http.Handler {
 	var (
 		h = notFound
 
-		handlers []interface{}
+		handlers   []interface{}
 		middleware []interface{}
 	)
 	for _, label := range labels {

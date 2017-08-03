@@ -1,13 +1,11 @@
 package dns
 
 import (
-	"strings"
-
 	"github.com/miekg/dns"
 	"github.com/vegertar/mux/x"
-	"github.com/vegertar/mux/x/radix"
 )
 
+// Node derives the `x.RadixNode` with specialized dns matching.
 type Node struct {
 	*x.RadixNode
 }
@@ -17,47 +15,108 @@ func (p *Node) Match(route x.Route) (leaves []x.Label) {
 	if len(route) > 2 {
 		// first matches qname only
 		nameLeaves := p.RadixNode.Match(route[:1])
+		typeAndClass := route[1:]
+		qtype := route[1][0].String()
+
 		for _, nameLeaf := range nameLeaves {
 			// then matches qtype and qclass
-			v := nameLeaf.Node.Match(route[1:])
-			if len(v) == 0 {
-				nameLeaf.Handler = append(nameLeaf.Handler, NoErrorHandler)
-				leaves = append(leaves, nameLeaf)
-			} else {
-				for _, leaf := range v {
-					up := leaf.Node.Up()
-					qtype := up.Key[0].String()
-					if len(leaf.Handler) > 0 {
-						switch qtype {
-						case "CNAME":
-							// no needs to follow name
-						case "NS":
-							labels.addGlue(false)
-						case "SOA":
-							labels.addSOA(false)
-						default:
-							labels.addCNAME(qtype)
-						}
-					} else {
-						// domain is existed, but no exactly matched data
-						switch qtype {
-						case "CNAME", "NS":
-							// no needs to match again
-						case "SOA":
-							labels = m[1:].matchSOA(qclass, false)
-						default:
-							labels = m.matchCNAME(qtype, qclass)
-							if !labels.available() {
-								labels = m.matchNS(qclass, true)
-							}
-						}
-
-						if !labels.available() && qtype != "SOA" {
-							labels = m.matchSOA(qclass, false)
-						}
+			v := nameLeaf.Node.Match(typeAndClass)
+			noData := true
+			for i, leaf := range v {
+				if len(leaf.Handler) > 0 {
+					noData = false
+					var middleware Middleware
+					switch qtype {
+					case "CNAME":
+						// no needs to follow name
+					case "NS":
+						middleware = p.glueMiddleware(false)
+					case "SOA":
+						middleware = p.soaMiddleware(false)
+					default:
+						middleware = p.cnameMiddleware(qtype)
+					}
+					if middleware != nil {
+						h := middleware.GenerateHandler(newMultiHandler(leaf.Handler...))
+						leaf.Handler = []interface{}{h}
+						v[i] = leaf
 					}
 				}
 			}
+
+			if noData {
+				// domain is existed, but no exactly matched data
+				switch qtype {
+				case "CNAME", "NS":
+					// no needs to match again
+				case "SOA":
+					// delays handling
+				default:
+					// checking CNAME
+					cnameKey, err := x.NewStringSliceKey(cnameType)
+					if err != nil {
+						panic(err)
+					}
+					labels := nameLeaf.Node.Match(x.Route{cnameKey, route[2]})
+					for i, leaf := range labels {
+						if len(leaf.Handler) > 0 {
+							noData = false
+							h := p.cnameMiddleware(qtype).GenerateHandler(newMultiHandler(leaf.Handler...))
+							leaf.Handler = []interface{}{h}
+							labels[i] = leaf
+						}
+					}
+					if noData {
+						// if no data then checks NS
+						nsKey, err := x.NewStringSliceKey(nsType)
+						if err != nil {
+							panic(err)
+						}
+						labels = nameLeaf.Node.Match(x.Route{nsKey, route[2]})
+						for i, leaf := range labels {
+							if len(leaf.Handler) > 0 {
+								noData = false
+								h := p.glueMiddleware(true).GenerateHandler(newMultiHandler(leaf.Handler...))
+								leaf.Handler = []interface{}{h}
+								labels[i] = leaf
+							}
+						}
+						if !noData {
+							v = append(v, labels...)
+						}
+					}
+				}
+
+				if noData {
+					// finally checking SOA
+					soaKey, err := x.NewStringSliceKey(soaType)
+					if err != nil {
+						panic(err)
+					}
+					labels := nameLeaf.Node.Match(x.Route{soaKey, route[2]})
+					for i, leaf := range labels {
+						if len(leaf.Handler) > 0 {
+							noData = false
+							h := p.soaMiddleware(false).GenerateHandler(newMultiHandler(leaf.Handler...))
+							leaf.Handler = []interface{}{h}
+							labels[i] = leaf
+						}
+					}
+					if qtype == "SOA" || !noData {
+						v = append(v, labels...)
+					}
+				}
+			}
+
+			// needs to clear name handlers
+			nameLeaf.Handler = nil
+			if noData {
+				nameLeaf.Handler = []interface{}{NoErrorHandler}
+			}
+			if len(nameLeaf.Handler) > 0 || len(nameLeaf.Middleware) > 0 {
+				leaves = append(leaves, nameLeaf)
+			}
+			leaves = append(leaves, v...)
 		}
 
 		return
@@ -67,6 +126,10 @@ func (p *Node) Match(route x.Route) (leaves []x.Label) {
 }
 
 func (p *Node) cnameMiddleware(qtype string) Middleware {
+	if p.Up() != nil {
+		panic("required root")
+	}
+
 	return MiddlewareFunc(func(h Handler) Handler {
 		if qtype == "CNAME" {
 			return h
@@ -106,6 +169,10 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 }
 
 func (p *Node) soaMiddleware(nameError bool) Middleware {
+	if p.Up() != nil {
+		panic("required root")
+	}
+
 	return MiddlewareFunc(func(h Handler) Handler {
 		return HandlerFunc(func(w ResponseWriter, req *Request) {
 			soaWriter := &responseWriter{}
@@ -148,6 +215,10 @@ func (p *Node) soaMiddleware(nameError bool) Middleware {
 }
 
 func (p *Node) glueMiddleware(delegated bool) Middleware {
+	if p.Up() != nil {
+		panic("required root")
+	}
+
 	return MiddlewareFunc(func(h Handler) Handler {
 		return HandlerFunc(func(w ResponseWriter, req *Request) {
 			nsWriter := &responseWriter{}
@@ -192,132 +263,4 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 			w.WriteMsg(&nsWriter.msg)
 		})
 	})
-}
-
-type Match []x.Label
-
-func (m Match) add(q Match) Match {
-	if len(m) == 0 {
-		return q
-	}
-	if len(q) == 0 {
-		return q
-	}
-
-	v := append(m, q...)
-	leaf := q[0]
-	for i := range m {
-		label := m[i]
-		label.Middleware = append(leaf.Middleware, label.Middleware...)
-		v[i] = label
-	}
-
-	return v
-}
-
-func (m Match) available() bool {
-	return len(m) != 0 && len(m[0].Handler) != 0
-}
-
-func (m Match) match(qtype, qclass radix.Key) (labels Match) {
-	if nameLeaf := m[0]; nameLeaf.Down != nil {
-		labels = nameLeaf.Down.Match(x.Route{qtype, qclass}, false).add(m)
-		if labels.available() {
-			switch qtype {
-			case "CNAME":
-			// no needs to follow name
-			case "NS":
-				labels.addGlue(false)
-			case "SOA":
-				labels.addSOA(false)
-			default:
-				labels.addCNAME(qtype)
-			}
-		} else {
-			// domain is existed, but no exactly matched data
-			switch qtype {
-			case "CNAME", "NS":
-			// no needs to match again
-			case "SOA":
-				labels = m[1:].matchSOA(qclass, false)
-			default:
-				labels = m.matchCNAME(qtype, qclass)
-				if !labels.available() {
-					labels = m.matchNS(qclass, true)
-				}
-			}
-
-			if !labels.available() && qtype != "SOA" {
-				labels = m.matchSOA(qclass, false)
-			}
-		}
-	} else {
-		labels = m.matchSOA(qclass, true)
-	}
-
-	return
-}
-
-func (m Match) matchSOA(qclass string, nameError bool) Match {
-	for i, label := range m {
-		if down := label.Down; down != nil {
-			q := down.(*Node).match(x.Route{"SOA", qclass}, false)
-			if q.available() {
-				q = q.add(m[i:])
-				q.addSOA(nameError)
-				return q
-			}
-		}
-	}
-
-	return m
-}
-
-func (m Match) matchNS(qclass string, delegated bool) Match {
-	for i, label := range m {
-		if down := label.Down; down != nil {
-			q := down.(*Node).match(x.Route{"NS", qclass}, false)
-			if q.available() {
-				q = q.add(m[i:])
-				q.addGlue(delegated)
-				return q
-			}
-		}
-	}
-
-	return m
-}
-
-func (m Match) matchCNAME(qtype, qclass string) Match {
-	if len(m) == 0 || m[0].Down == nil {
-		return m
-	}
-
-	q := m[0].Down.(*Node).match(x.Route{"CNAME", qclass}, false).add(m)
-	if q.available() && qtype != "CNAME" {
-		q.addCNAME(qtype)
-	}
-
-	return q
-}
-
-func (m Match) addSOA(nameError bool) {
-	root := m[len(m) - 1].Node.(*Node)
-	soaMiddleware := root.soaMiddleware(nameError)
-	leaf := &m[0]
-	leaf.Middleware = append([]interface{}{soaMiddleware}, leaf.Middleware...)
-}
-
-func (m Match) addGlue(delegated bool) {
-	root := m[len(m) - 1].Node.(*Node)
-	glueMiddleware := root.glueMiddleware(delegated)
-	leaf := &m[0]
-	leaf.Middleware = append([]interface{}{glueMiddleware}, leaf.Middleware...)
-}
-
-func (m Match) addCNAME(qtype string) {
-	root := m[len(m) - 1].Node.(*Node)
-	cnameMiddleware := root.cnameMiddleware(qtype)
-	leaf := &m[0]
-	leaf.Middleware = append([]interface{}{cnameMiddleware}, leaf.Middleware...)
 }

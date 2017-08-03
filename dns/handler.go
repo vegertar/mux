@@ -3,32 +3,24 @@ package dns
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/miekg/dns"
 	"github.com/vegertar/mux/x"
 )
 
+// A ResponseWriter interface is used by a DNS handler to construct an DNS response.
 type ResponseWriter interface {
 	Header() *dns.MsgHdr
 	Answer(...dns.RR)
 	Ns(...dns.RR)
 	Extra(...dns.RR)
 	WriteMsg(*dns.Msg) error
-	Writer() dns.ResponseWriter
-}
-
-func NewResponseWriter(w dns.ResponseWriter) ResponseWriter {
-	return &responseWriter{
-		ResponseWriter: w,
-	}
 }
 
 type responseWriter struct {
 	dns.ResponseWriter
 	msg     dns.Msg
 	written bool
-	mu      sync.Mutex
 }
 
 func (p *responseWriter) Header() *dns.MsgHdr {
@@ -36,30 +28,18 @@ func (p *responseWriter) Header() *dns.MsgHdr {
 }
 
 func (p *responseWriter) Answer(r ...dns.RR) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	p.msg.Answer = append(p.msg.Answer, r...)
 }
 
 func (p *responseWriter) Ns(r ...dns.RR) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	p.msg.Ns = append(p.msg.Ns, r...)
 }
 
 func (p *responseWriter) Extra(r ...dns.RR) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	p.msg.Extra = append(p.msg.Extra, r...)
 }
 
 func (p *responseWriter) WriteMsg(msg *dns.Msg) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if msg != nil {
 		if msg.Id != 0 {
 			p.msg.Id = msg.Id
@@ -92,23 +72,20 @@ func (p *responseWriter) WriteMsg(msg *dns.Msg) error {
 			p.msg.Question = make([]dns.Question, 1)
 			p.msg.Question[0] = msg.Question[0]
 		}
-
-		for _, r := range msg.Answer {
-			p.msg.Answer = append(p.msg.Answer, r)
+		if len(msg.Answer) > 0 {
+			p.msg.Answer = append(p.msg.Answer, msg.Answer...)
 		}
-
-		for _, r := range msg.Ns {
-			p.msg.Ns = append(p.msg.Ns, r)
+		if len(msg.Ns) > 0 {
+			p.msg.Ns = append(p.msg.Ns, msg.Ns...)
 		}
-
-		for _, r := range msg.Extra {
-			p.msg.Extra = append(p.msg.Extra, r)
+		if len(msg.Extra) > 0 {
+			p.msg.Extra = append(p.msg.Extra, msg.Extra...)
 		}
 	}
 
 	if p.ResponseWriter != nil {
 		if p.written {
-			return ErrMsgWritten
+			return ErrResponseWritten
 		}
 
 		p.written = true
@@ -125,12 +102,14 @@ func (p *responseWriter) Writer() dns.ResponseWriter {
 	return p.ResponseWriter
 }
 
+// A Request represents a DNS request received by a server.
 type Request struct {
 	*dns.Msg
 
 	ctx context.Context
 }
 
+// Context returns the request's context. To change the context, use WithContext.
 func (r *Request) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx
@@ -138,6 +117,8 @@ func (r *Request) Context() context.Context {
 	return context.Background()
 }
 
+// WithContext returns a shallow copy of r with its context changed to ctx.
+// The provided ctx must be non-nil.
 func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
@@ -148,18 +129,23 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	return r2
 }
 
+// A Handler responds to a DNS request.
 type Handler interface {
 	ServeDNS(ResponseWriter, *Request)
 }
 
+// The HandlerFunc type is an adapter to allow the use of ordinary functions as DNS handlers.
 type HandlerFunc func(ResponseWriter, *Request)
 
+// ServeDNS implements `Handler` interface.
 func (f HandlerFunc) ServeDNS(w ResponseWriter, r *Request) {
 	f(w, r)
 }
 
+// MultiHandler is a wrapper of multiple DNS handlers.
 type MultiHandler []Handler
 
+// ServeDNS implements `Handler` interface.
 func (m MultiHandler) ServeDNS(w ResponseWriter, r *Request) {
 	for _, h := range m {
 		h.ServeDNS(w, r)
@@ -178,7 +164,7 @@ func newHandlerFromLabels(labels []x.Label) Handler {
 	var (
 		h Handler = RefusedErrorHandler
 
-		handlers []interface{}
+		handlers   []interface{}
 		middleware []interface{}
 	)
 
@@ -200,19 +186,27 @@ func newHandlerFromLabels(labels []x.Label) Handler {
 	return h
 }
 
+// ErrorHandler responses a given code to client.
 type ErrorHandler int
 
+// ServeDNS implements `Handler` interface.
 func (e ErrorHandler) ServeDNS(w ResponseWriter, r *Request) {
 	w.Header().Rcode = int(e)
 	w.WriteMsg(r.Msg)
 }
 
 var (
-	ErrMsgWritten = errors.New("message has been written")
+	// ErrResponseWritten resulted from writting a written response.
+	ErrResponseWritten = errors.New("response has been written")
 
-	NoErrorHandler      = ErrorHandler(dns.RcodeSuccess)
-	NameErrorHandler    = ErrorHandler(dns.RcodeNameError)
-	FormatErrorHandler  = ErrorHandler(dns.RcodeFormatError)
+	// NoErrorHandler responses `dns.RcodeSuccess`.
+	NoErrorHandler = ErrorHandler(dns.RcodeSuccess)
+	// NameErrorHandler responses `dns.RcodeNameError`.
+	NameErrorHandler = ErrorHandler(dns.RcodeNameError)
+	// FormatErrorHandler responses `dns.RcodeFormatError`.
+	FormatErrorHandler = ErrorHandler(dns.RcodeFormatError)
+	// RefusedErrorHandler responses `dns.RcodeRefused`.
 	RefusedErrorHandler = ErrorHandler(dns.RcodeRefused)
+	// FailureErrorHandler responses `dns.RcodeServerFailure`.
 	FailureErrorHandler = ErrorHandler(dns.RcodeServerFailure)
 )
