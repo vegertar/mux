@@ -1,6 +1,8 @@
 package x
 
 import (
+	"sync"
+
 	"github.com/vegertar/mux/x/radix"
 )
 
@@ -11,25 +13,22 @@ type Label struct {
 }
 
 // Node defines a interface to add, delete, match and iterate a router.
+// A node should implement concurrent safety.
 type Node interface {
-	// Make should make all necessary nodes and labels while matching through the given route.
-	// If successful, it returns a label matched the last component of route.
-	Make(route Route, breed BreedFunc) (*Label, error)
+	// Get returns a label from this Node.
+	Get(key radix.Key, createIfMissing bool) *Label
 
 	// Delete deletes a label.
 	Delete(label *Label)
-
-	// Leaves returns all labels has nil `Down` node.
-	Leaves() []*Label
-
-	// Get returns a label from this Node.
-	Get(key radix.Key, createIfMissing bool) *Label
 
 	// Up returns a parent label.
 	Up() *Label
 
 	// Empty returns if it is empty.
 	Empty() bool
+
+	// Leaves returns all labels has nil `Down` node.
+	Leaves() []*Label
 
 	// Match returns all labels matched given route.
 	Match(route Route) []Label
@@ -39,6 +38,7 @@ type Node interface {
 type RadixNode struct {
 	tree *radix.Tree
 	up   *Label
+	mu   sync.RWMutex
 }
 
 // NewRadixNode creates a Node instance.
@@ -56,40 +56,27 @@ func (p *RadixNode) Up() *Label {
 
 // Empty implements the `Node` interface.
 func (p *RadixNode) Empty() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.tree.Len() == 0
 }
 
 // Delete implements the `Node` interface.
 func (p *RadixNode) Delete(label *Label) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.tree.Delete(label.Key)
-}
-
-// Make implements the `Node` interface.
-func (p *RadixNode) Make(route Route, breed BreedFunc) (*Label, error) {
-	var (
-		leaf *Label
-		node Node = p
-	)
-
-	for _, k := range route {
-		if leaf != nil {
-			if leaf.Down == nil {
-				leaf.Down = breed(leaf)
-			}
-			node = leaf.Down
-		}
-
-		leaf = node.Get(k, true)
-	}
-
-	return leaf, nil
 }
 
 // Match implements the `Node` interface.
 func (p *RadixNode) Match(route Route) (leaves []Label) {
 	if len(route) > 0 {
 		k := route[0]
-		for _, v := range p.tree.Match(k) {
+		p.mu.RLock()
+		match := p.tree.Match(k)
+		p.mu.RUnlock()
+
+		for _, v := range match {
 			label := v.Value.(*Label)
 			if len(route) > 1 && label.Down != nil {
 				leaves = append(leaves, label.Down.Match(route[1:])...)
@@ -117,6 +104,9 @@ func (p *RadixNode) Match(route Route) (leaves []Label) {
 
 // Leaves implements the `Node` interface.
 func (p *RadixNode) Leaves() []*Label {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	var out []*Label
 	p.tree.Walk(func(leaf radix.Leaf) bool {
 		label := leaf.Value.(*Label)
@@ -133,7 +123,9 @@ func (p *RadixNode) Leaves() []*Label {
 
 // Get implements the `Node` interface.
 func (p *RadixNode) Get(k radix.Key, createIfMissing bool) *Label {
+	p.mu.RLock()
 	value, ok := p.tree.Get(k)
+	p.mu.RUnlock()
 	if ok && value != nil {
 		return value.(*Label)
 	}
@@ -142,7 +134,9 @@ func (p *RadixNode) Get(k radix.Key, createIfMissing bool) *Label {
 		label := new(Label)
 		label.Key = k
 		label.Node = p
+		p.mu.Lock()
 		p.tree.Insert(k, label)
+		p.mu.Unlock()
 		return label
 	}
 
