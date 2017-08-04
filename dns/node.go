@@ -11,7 +11,7 @@ type Node struct {
 }
 
 // Match implements the `x.Node` interface.
-func (p *Node) Match(route x.Route) (leaves []x.Label) {
+func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 	if len(route) > 2 {
 		// first matches qname only
 		nameLeaves := p.RadixNode.Match(route[:1])

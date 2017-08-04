@@ -160,7 +160,7 @@ func newMultiHandler(handler ...interface{}) MultiHandler {
 	return MultiHandler(m)
 }
 
-func newHandlerFromLabels(labels []x.Label) Handler {
+func newHandlerFromLabels(labels []*x.Label) Handler {
 	var (
 		h Handler = RefusedErrorHandler
 

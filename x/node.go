@@ -2,6 +2,7 @@ package x
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/vegertar/mux/x/radix"
 )
@@ -10,6 +11,84 @@ import (
 type Label struct {
 	Value
 	Key radix.Key
+
+	mu sync.RWMutex
+}
+
+// Clone returns a shadow copy
+func (p *Label) Clone() *Label {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var v Label
+	v.Value = p.Value
+	v.Key = p.Key
+	return &v
+}
+
+func (p *Label) getDown(breed BreedFunc) Node {
+	p.mu.RLock()
+	down := p.Down
+	p.mu.RUnlock()
+	if down == nil {
+		down = breed(p)
+		p.mu.Lock()
+		if p.Down == nil {
+			p.Down = down
+		} else {
+			down = p.Down
+		}
+		p.mu.Unlock()
+	}
+	return down
+}
+
+// free delete all trivial labels down to up
+func (p *Label) free() {
+	for v := p; v != nil &&
+		len(v.Handler) == 0 &&
+		len(v.Middleware) == 0 &&
+		(v.Down == nil || v.Down.Empty()); v = v.Node.Up() {
+		v.Node.Delete(v)
+	}
+}
+
+func (p *Label) setupHandler(h []interface{}) CloseFunc {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	n := len(p.Handler)
+	p.Handler = append(p.Handler, h...)
+
+	var closed int32
+	return func() {
+		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			p.Handler = append(p.Handler[:n], p.Handler[n+len(h):]...)
+			p.free()
+		}
+	}
+}
+
+func (p *Label) setupMiddleware(m []interface{}) CloseFunc {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	n := len(p.Middleware)
+	p.Middleware = append(p.Middleware, m...)
+
+	var closed int32
+	return func() {
+		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			p.Middleware = append(p.Middleware[:n], p.Middleware[n+len(m):]...)
+			p.free()
+		}
+	}
 }
 
 // Node defines a interface to add, delete, match and iterate a router.
@@ -31,7 +110,7 @@ type Node interface {
 	Leaves() []*Label
 
 	// Match returns all labels matched given route.
-	Match(route Route) []Label
+	Match(route Route) []*Label
 }
 
 // RadixNode uses radix tree to store and search route components.
@@ -69,7 +148,7 @@ func (p *RadixNode) Delete(label *Label) {
 }
 
 // Match implements the `Node` interface.
-func (p *RadixNode) Match(route Route) (leaves []Label) {
+func (p *RadixNode) Match(route Route) (leaves []*Label) {
 	if len(route) > 0 {
 		k := route[0]
 		p.mu.RLock()
@@ -77,7 +156,7 @@ func (p *RadixNode) Match(route Route) (leaves []Label) {
 		p.mu.RUnlock()
 
 		for _, v := range match {
-			label := v.Value.(*Label)
+			label := v.Value.(*Label).Clone()
 			if len(route) > 1 && label.Down != nil {
 				leaves = append(leaves, label.Down.Match(route[1:])...)
 				continue
@@ -85,16 +164,15 @@ func (p *RadixNode) Match(route Route) (leaves []Label) {
 
 			// check if label is a leaf
 			if len(route) == 1 || label.Down == nil && label.Key.Wildcard() {
-				leaves = append(leaves, *label)
+				leaves = append(leaves, label)
 				continue
 			}
 
 			// remains as a middleware
 			if len(label.Middleware) > 0 {
-				x := *label
 				// clears unnecessary handlers
-				x.Handler = nil
-				leaves = append(leaves, x)
+				label.Handler = nil
+				leaves = append(leaves, label)
 			}
 		}
 	}
@@ -103,22 +181,21 @@ func (p *RadixNode) Match(route Route) (leaves []Label) {
 }
 
 // Leaves implements the `Node` interface.
-func (p *RadixNode) Leaves() []*Label {
+func (p *RadixNode) Leaves() (leaves []*Label) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	var out []*Label
 	p.tree.Walk(func(leaf radix.Leaf) bool {
-		label := leaf.Value.(*Label)
+		label := leaf.Value.(*Label).Clone()
 		if label.Down != nil {
-			out = append(out, label.Down.Leaves()...)
+			leaves = append(leaves, label.Down.Leaves()...)
 		} else {
-			out = append(out, label)
+			leaves = append(leaves, label)
 		}
 		return false
 	})
 
-	return out
+	return
 }
 
 // Get implements the `Node` interface.
@@ -134,6 +211,7 @@ func (p *RadixNode) Get(k radix.Key, createIfMissing bool) *Label {
 		label := new(Label)
 		label.Key = k
 		label.Node = p
+
 		p.mu.Lock()
 		p.tree.Insert(k, label)
 		p.mu.Unlock()

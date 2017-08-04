@@ -70,7 +70,7 @@ func newMultiHandler(handler ...interface{}) MultiHandler {
 	return MultiHandler(m)
 }
 
-func newHandlerFromLabels(labels []x.Label) http.Handler {
+func newHandlerFromLabels(labels []*x.Label) http.Handler {
 	var (
 		h = notFound
 

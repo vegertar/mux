@@ -4,7 +4,6 @@ package x
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
 
 	"github.com/vegertar/mux/x/radix"
 )
@@ -41,11 +40,15 @@ func (p *Router) Routes() []Route {
 
 	for _, leaf := range p.root().Leaves() {
 		var layers []radix.Key
-		for leaf != nil {
+		for {
 			if len(leaf.Handler) > 0 || len(leaf.Middleware) > 0 {
 				layers = append(layers, leaf.Key)
 			}
-			leaf = leaf.Node.Up()
+			up := leaf.Node.Up()
+			if up == nil {
+				break
+			}
+			leaf = up.Clone()
 		}
 
 		if len(layers) > 0 {
@@ -57,85 +60,23 @@ func (p *Router) Routes() []Route {
 }
 
 // Match matches a route and returns all associated labels.
-func (p *Router) Match(r Route) []Label {
+func (p *Router) Match(r Route) []*Label {
 	return p.root().Match(r)
 }
 
 // Use associates a route with middleware.
 func (p *Router) Use(r Route, m ...interface{}) (CloseFunc, error) {
-	leaf := p.leaf(r)
-
-	// TODO: locking
-	for _, v := range m {
-		leaf.Middleware = append(leaf.Middleware, v)
-	}
-
-	var closed int32
-	return func() {
-		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
-			for _, t := range m {
-				index := -1
-				for i, v := range leaf.Middleware {
-					if v == t {
-						index = i
-						break
-					}
-				}
-
-				if index != -1 {
-					leaf.Middleware = append(leaf.Middleware[:index], leaf.Middleware[index+1:]...)
-				}
-			}
-
-			p.free(leaf)
-		}
-	}, nil
+	return p.leaf(r).setupMiddleware(m), nil
 }
 
 // Handle associates a route with handlers.
-// If configured `DisableDupRoute`, only one handle can be added or `ErrExistedRoute` will be returned.
+// If set `DisableDupRoute`, only one handle can be added or `ErrExistedRoute` is returned.
 func (p *Router) Handle(r Route, h ...interface{}) (CloseFunc, error) {
 	leaf := p.leaf(r)
 	if p.DisableDupRoute && len(leaf.Handler) > 0 {
 		return nil, ErrExistedRoute
 	}
-
-	for _, v := range h {
-		leaf.Handler = append(leaf.Handler, v)
-	}
-
-	var closed int32
-	return func() {
-		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-
-			for _, t := range h {
-				index := -1
-				for i, v := range leaf.Handler {
-					if v == t {
-						index = i
-						break
-					}
-				}
-
-				if index != -1 {
-					leaf.Handler = append(leaf.Handler[:index], leaf.Handler[index+1:]...)
-				}
-			}
-
-			p.free(leaf)
-		}
-	}, nil
-}
-
-// free deletes a trivial route from down to up recursively.
-func (p *Router) free(v *Label) {
-	for v != nil && len(v.Handler) == 0 && len(v.Middleware) == 0 && (v.Down == nil || v.Down.Empty()) {
-		node := v.Node
-		node.Delete(v)
-		v = node.Up()
-	}
+	return leaf.setupHandler(h), nil
 }
 
 func (p *Router) root() Node {
@@ -165,11 +106,7 @@ func (p *Router) leaf(r Route) *Label {
 
 	for _, k := range r {
 		if leaf != nil {
-			// TODO: locking leaf
-			if leaf.Down == nil {
-				leaf.Down = p.Breed(leaf)
-			}
-			node = leaf.Down
+			node = leaf.getDown(p.Breed)
 		}
 
 		leaf = node.Get(k, true)

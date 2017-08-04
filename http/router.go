@@ -18,7 +18,7 @@ func NewRouter() *Router {
 	return &Router{
 		Router: &x.Router{
 			Breed: func(up *x.Label) x.Node {
-				return x.NewRadixNode(up),
+				return x.NewRadixNode(up)
 			},
 		},
 	}
@@ -50,9 +50,9 @@ func (p *Router) Routes() []Route {
 func (p *Router) Match(c Route) http.Handler {
 	r, err := newRoute(c)
 	if err != nil {
-		return func(w http.ResponseWriter, req *http.Request) {
-			http.Error(w, err, 500)
-		}
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			http.Error(w, err.Error(), 500)
+		})
 	}
 	return newHandlerFromLabels(p.Router.Match(r))
 }
