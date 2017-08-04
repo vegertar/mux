@@ -135,8 +135,8 @@ func (p *RadixNode) Up() *Label {
 
 // Empty implements the `Node` interface.
 func (p *RadixNode) Empty() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.tree.Len() == 0
 }
 
