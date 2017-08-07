@@ -24,9 +24,11 @@ type (
 	// Route is a matching sequence for muxing request, e.g. an array of `scheme`, `method`, `path`, etc.
 	Route []radix.Key
 
-	// Router is a root node of mux and carries a few options.
+	// Router is the mux in which carries a few options and a root node.
 	Router struct {
-		Breed           BreedFunc
+		// Breed is a factory function to create a new node.
+		Breed BreedFunc
+		// DisableDupRoute disallowed to register duplicated routes.
 		DisableDupRoute bool
 
 		mu   sync.RWMutex
@@ -39,20 +41,17 @@ func (p *Router) Routes() []Route {
 	var out []Route
 
 	for _, leaf := range p.root().Leaves() {
-		var layers []radix.Key
 		for {
 			if len(leaf.Handler) > 0 || len(leaf.Middleware) > 0 {
-				layers = append(layers, leaf.Key)
+				if route := p.route(leaf); len(route) > 0 {
+					out = append(out, route)
+				}
 			}
 			up := leaf.Node.Up()
 			if up == nil {
 				break
 			}
 			leaf = up.Clone()
-		}
-
-		if len(layers) > 0 {
-			out = append(out, layers)
 		}
 	}
 
@@ -113,4 +112,21 @@ func (p *Router) leaf(r Route) *Label {
 	}
 
 	return leaf
+}
+
+func (p *Router) route(leaf *Label) Route {
+	var route []radix.Key
+
+	for {
+		route = append(route, leaf.Key)
+		up := leaf.Node.Up()
+		if up == nil {
+			break
+		}
+		leaf = up.Clone()
+	}
+	for i, j := 0, len(route) - 1; i < j; i, j = i+1, j-1 {
+		route[i], route[j] = route[j], route[i]
+	}
+	return route
 }

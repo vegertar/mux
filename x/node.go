@@ -1,10 +1,12 @@
 package x
 
 import (
+	"container/list"
 	"sync"
 	"sync/atomic"
 
 	"github.com/vegertar/mux/x/radix"
+	"fmt"
 )
 
 // Label is used to represent a value.
@@ -12,7 +14,9 @@ type Label struct {
 	Value
 	Key radix.Key
 
-	mu sync.RWMutex
+	h   list.List
+	m   list.List
+	mu  sync.RWMutex
 }
 
 // Clone returns a shadow copy
@@ -21,8 +25,9 @@ func (p *Label) Clone() *Label {
 	defer p.mu.RUnlock()
 
 	var v Label
-	v.Value = p.Value
 	v.Key = p.Key
+	v.Value = p.Value
+
 	return &v
 }
 
@@ -57,8 +62,8 @@ func (p *Label) setupHandler(h []interface{}) CloseFunc {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	n := len(p.Handler)
 	p.Handler = append(p.Handler, h...)
+	elem := p.h.PushBack(h)
 
 	var closed int32
 	return func() {
@@ -66,7 +71,12 @@ func (p *Label) setupHandler(h []interface{}) CloseFunc {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 
-			p.Handler = append(p.Handler[:n], p.Handler[n+len(h):]...)
+			p.h.Remove(elem)
+			p.Handler = p.Handler[:0]
+			for e := p.h.Front(); e != nil; e = e.Next() {
+				p.Handler = append(p.Handler, e.Value.([]interface{})...)
+			}
+
 			p.free()
 		}
 	}
@@ -76,8 +86,8 @@ func (p *Label) setupMiddleware(m []interface{}) CloseFunc {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	n := len(p.Middleware)
 	p.Middleware = append(p.Middleware, m...)
+	elem := p.m.PushBack(m)
 
 	var closed int32
 	return func() {
@@ -85,7 +95,12 @@ func (p *Label) setupMiddleware(m []interface{}) CloseFunc {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 
-			p.Middleware = append(p.Middleware[:n], p.Middleware[n+len(m):]...)
+			p.m.Remove(elem)
+			p.Middleware = p.Middleware[:0]
+			for e := p.m.Front(); e != nil; e = e.Next() {
+				p.Middleware = append(p.Middleware, e.Value.([]interface{})...)
+			}
+
 			p.free()
 		}
 	}
@@ -154,6 +169,8 @@ func (p *RadixNode) Match(route Route) (leaves []*Label) {
 		p.mu.RLock()
 		match := p.tree.Match(k)
 		p.mu.RUnlock()
+
+		fmt.Printf("%d, %#v, %q\n", len(route), match, k.Strings())
 
 		for _, v := range match {
 			label := v.Value.(*Label).Clone()

@@ -155,7 +155,12 @@ func (m MultiHandler) ServeDNS(w ResponseWriter, r *Request) {
 func newMultiHandler(handler ...interface{}) MultiHandler {
 	m := make([]Handler, 0, len(handler))
 	for _, v := range handler {
-		m = append(m, v.(Handler))
+		if v != nil {
+			m = append(m, v.(Handler))
+		}
+	}
+	if len(m) == 0 {
+		return nil
 	}
 	return MultiHandler(m)
 }
@@ -177,7 +182,9 @@ func newHandlerFromLabels(labels []*x.Label) Handler {
 	}
 
 	for i := range middleware {
-		h = middleware[len(middleware)-1-i].(Middleware).GenerateHandler(h)
+		if m := middleware[len(middleware)-1-i]; m != nil {
+			h = m.(Middleware).GenerateHandler(h)
+		}
 	}
 
 	if h == nil {

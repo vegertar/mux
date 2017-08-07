@@ -13,6 +13,7 @@ func TestGlobLabel_Match(t *testing.T) {
 
 	cases := []exp{
 		{"", "", true},
+		{"*", "", true},
 		{"*", "ab", true},
 		{"ab", "ab", true},
 		{"a*b", "ab", true},
