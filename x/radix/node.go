@@ -84,11 +84,13 @@ func longestPrefix(x, y Key) int {
 	return i
 }
 
-func isPrefixOfLiteralKey(x, y Key) bool {
-	if len(x) <= len(y) {
-		return x.Match(y[:len(x)])
+func prefixOfLiteralKey(x, y Key) int {
+	for i := len(x); i <= len(y); i++ {
+		if x.Match(y[:i]) {
+			return i
+		}
 	}
-	return false
+	return 0
 }
 
 type node struct {

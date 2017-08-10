@@ -14,6 +14,8 @@ type Label interface {
 	String() string
 	// Literal returns if this label contains string literal only.
 	Literal() bool
+	// Wildcards returns if this label matches multiple continued tokens.
+	Wildcards() bool
 }
 
 // StringLabel is the label based on string literal.
@@ -34,19 +36,25 @@ func (s StringLabel) Literal() bool {
 	return true
 }
 
-// GlobLabel is the label supposed to be matched by asterisk (*).
-type GlobLabel struct {
-	s     string
-	parts []string
+// Wildcards implements the `Label` interface.
+func (s StringLabel) Wildcards() bool {
+	return false
+}
+
+// globLabel is the label supposed to be matched by asterisk (*).
+type globLabel struct {
+	s         string
+	parts     []string
+	wildcards bool
 }
 
 // String implements the `Label` interface.
-func (p *GlobLabel) String() string {
+func (p *globLabel) String() string {
 	return p.s
 }
 
 // Match implements the `Label` interface.
-func (p *GlobLabel) Match(subj string) bool {
+func (p *globLabel) Match(subj string) bool {
 	if p.s == glob {
 		return true
 	}
@@ -77,7 +85,7 @@ func (p *GlobLabel) Match(subj string) bool {
 		}
 
 		// Trim evaluated text from subj as we loop over the pattern.
-		subj = subj[idx+len(p.parts[i]):]
+		subj = subj[idx + len(p.parts[i]):]
 	}
 
 	// Reached the last section. Requires special handling.
@@ -85,27 +93,120 @@ func (p *GlobLabel) Match(subj string) bool {
 }
 
 // Literal implements the `Label` interface.
-func (p *GlobLabel) Literal() bool {
+func (p *globLabel) Literal() bool {
 	return false
 }
 
-// NewGlobLabel creates a glob patterned label which can use '*' to match any string.
-func NewGlobLabel(s string) *GlobLabel {
-	return &GlobLabel{s: s, parts: strings.Split(s, glob)}
+// Wildcards implements the `Label` interface.
+func (p *globLabel) Wildcards() bool {
+	return p.wildcards
+}
+
+// newGlobLabel creates a glob patterned label which can use '*' to match any string.
+func newGlobLabel(s string) *globLabel {
+	return &globLabel{
+		s: s,
+		parts: strings.Split(s, glob),
+		wildcards: len(s) > 1 && strings.Trim(s, glob) == "",
+	}
 }
 
 // Key is the key to insert, delete, and search a tree.
 type Key []Label
 
+func (k Key) split(f func(Label) bool) []Key {
+	if len(k) == 0 {
+		return nil
+	}
+
+	out := make([]Key, 0, 2)
+	last := -1
+
+	for i, label := range k {
+		if f(label) {
+			out = append(out, k[last + 1:i])
+			last = i
+		}
+	}
+	if last >= 0 && last < len(k) - 1 {
+		out = append(out, k[last + 1:])
+	}
+
+	return out
+}
+
+func (k Key) matchExactly(x Key) bool {
+	n := len(k)
+	if n != len(x) {
+		return false
+	}
+
+	for i := 0; i < n; i++ {
+		if !k[i].Match(x[i].String()) {
+			return false
+		}
+	}
+	return true
+}
+
 // Match returns if key matches another one.
 func (k Key) Match(x Key) bool {
-	if len(k) == len(x) {
-		for i, label := range k {
-			if !label.Match(x[i].String()) {
+	if len(k) == 0 {
+		return len(x) == 0
+	}
+
+	leadingGlob := k[0].Wildcards()
+	trailingGlob := k[len(k) - 1].Wildcards()
+
+	parts := k.split(func(l Label) bool {
+		return l.Wildcards()
+	})
+
+	if len(parts) == 0 {
+		return true
+	}
+
+	if len(parts) == 1 {
+		return parts[0].matchExactly(x)
+	}
+
+	end := len(parts) - 1
+
+	// Go over the leading parts and ensure they match.
+	for i := 0; i < end; i++ {
+		idx := -1
+		y := parts[i]
+		n := len(y)
+		for j := 0; j + n <= len(x); j++ {
+			if y.matchExactly(x[j:j + n]) {
+				idx = j
+				break
+			}
+		}
+
+		switch i {
+		case 0:
+			// Check the first section. Requires special handling.
+			if !leadingGlob && idx != 0 {
+				return false
+			}
+		default:
+			// Check that the middle parts match.
+			if idx < 0 {
 				return false
 			}
 		}
+
+		// Trim evaluated label from x as we loop over the pattern.
+		x = x[idx + n:]
+	}
+
+	// Reached the last section. Requires special handling.
+	if trailingGlob {
 		return true
+	}
+	if y := parts[end]; len(x) >= len(y) {
+		return y.matchExactly(x[len(x) - len(y):])
 	}
 	return false
 }
@@ -123,11 +224,11 @@ func (k Key) Is(x ...string) bool {
 	return false
 }
 
-// Wildcard returns if key contains asterisk ('*') only.
-func (k Key) Wildcard() bool {
+// Wildcards returns if key contains wildcarded labels only.
+func (k Key) Wildcards() bool {
 	if len(k) > 0 {
 		for _, label := range k {
-			if s := label.String(); len(s) == 0 || strings.Trim(s, glob) != "" {
+			if !label.Wildcards() {
 				return false
 			}
 		}
@@ -198,7 +299,7 @@ func NewGlobSliceKey(v []string) Key {
 	for _, s := range v {
 		var label Label
 		if strings.Index(s, glob) != -1 {
-			label = NewGlobLabel(s)
+			label = newGlobLabel(s)
 		} else {
 			label = StringLabel(s)
 		}

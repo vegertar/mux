@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 
 	"github.com/vegertar/mux/x/radix"
-	"fmt"
 )
 
 // Label is used to represent a value.
@@ -165,12 +164,9 @@ func (p *RadixNode) Delete(label *Label) {
 // Match implements the `Node` interface.
 func (p *RadixNode) Match(route Route) (leaves []*Label) {
 	if len(route) > 0 {
-		k := route[0]
 		p.mu.RLock()
-		match := p.tree.Match(k)
+		match := p.tree.Match(route[0])
 		p.mu.RUnlock()
-
-		fmt.Printf("%d, %#v, %q\n", len(route), match, k.Strings())
 
 		for _, v := range match {
 			label := v.Value.(*Label).Clone()
@@ -179,8 +175,8 @@ func (p *RadixNode) Match(route Route) (leaves []*Label) {
 				continue
 			}
 
-			// check if label is a leaf
-			if len(route) == 1 || label.Down == nil && label.Key.Wildcard() {
+			// check if label is a leaf TODO:
+			if len(route) == 1 || label.Down == nil && len(label.Key) > 1 && label.Key.Wildcard() {
 				leaves = append(leaves, label)
 				continue
 			}

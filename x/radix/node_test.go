@@ -10,8 +10,8 @@ func stringLabel(s string) Label {
 	return StringLabel(s)
 }
 
-func globLabel(s string) Label {
-	return NewGlobLabel(s)
+func xGlobLabel(s string) Label {
+	return newGlobLabel(s)
 }
 
 func TestLessLabel(t *testing.T) {
@@ -23,23 +23,23 @@ func TestLessLabel(t *testing.T) {
 
 	cases := []exp{
 		{"x", "x", false, stringLabel},
-		{"x", "x", false, globLabel},
+		{"x", "x", false, xGlobLabel},
 		{"x", "y", true, stringLabel},
-		{"x", "y", true, globLabel},
+		{"x", "y", true, xGlobLabel},
 		{"y", "x", false, stringLabel},
-		{"y", "x", false, globLabel},
+		{"y", "x", false, xGlobLabel},
 		{"x", "*", false, stringLabel},
-		{"x", "*", true, globLabel},
+		{"x", "*", true, xGlobLabel},
 		{"*", "x", true, stringLabel},
-		{"*", "x", false, globLabel},
+		{"*", "x", false, xGlobLabel},
 		{"*", "*", false, stringLabel},
-		{"*", "*", false, globLabel},
+		{"*", "*", false, xGlobLabel},
 		{"x", "x*", true, stringLabel},
-		{"x", "x*", true, globLabel},
+		{"x", "x*", true, xGlobLabel},
 		{"x", "*x", false, stringLabel},
-		{"x", "*x", true, globLabel},
+		{"x", "*x", true, xGlobLabel},
 		{"x*", "x", false, stringLabel},
-		{"x*", "x", false, globLabel},
+		{"x*", "x", false, xGlobLabel},
 	}
 
 	for i, c := range cases {
@@ -96,8 +96,8 @@ func TestNode_Search(t *testing.T) {
 		{"", stringLabel},
 		{"/v1/x", stringLabel},
 		{"/v2/x", stringLabel},
-		{"/v*/x", globLabel},
-		{"/v3/*", globLabel},
+		{"/v*/x", xGlobLabel},
+		{"/v3/*", xGlobLabel},
 	}
 
 	n := new(node)

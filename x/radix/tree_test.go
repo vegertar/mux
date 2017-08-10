@@ -262,6 +262,60 @@ func TestLongestPrefix_Glob(t *testing.T) {
 	}
 }
 
+func TestMatch_Glob(t *testing.T) {
+	r := New()
+
+	keys := []string{
+		//"*",
+		//"**",
+		//"foo",
+		//"foo/bar",
+		//"foo/*/baz",
+		//"foo/bar/baz/zip",
+		//"foo/bar/baz/*",
+		//"foo/bar/baz/**",
+		//"foo/zip*",
+		"foo/**/x",
+	}
+	for _, k := range keys {
+		x := NewGlobKey(k, "/")
+		old, updated := r.Insert(x, nil)
+		if updated {
+			t.Fatalf("bad updating: %v, %v", old, x)
+		}
+	}
+	if r.Len() != len(keys) {
+		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
+	}
+
+	type exp struct {
+		x string
+		y []string
+	}
+	cases := []exp{
+		{"foo", []string{"foo", "*", "**"}},
+		{"foo/bar", []string{"foo/bar", "**"}},
+		{"foo/bar/baz", []string{"foo/*/baz", "**"}},
+		{"foo/bar/baz/zi", []string{"foo/bar/baz/*", "foo/bar/baz/**", "**"}},
+		{"foo/bar/baz/zip", []string{"foo/bar/baz/zip", "foo/bar/baz/*", "foo/bar/baz/**", "**"}},
+		{"foo/bar/baz/zip/x/y/z", []string{"foo/bar/baz/**", "**"}},
+		{"foo/zip", []string{"foo/zip*", "**"}},
+		{"foo/zip1", []string{"foo/zip*", "**"}},
+		{"foo/1/x", []string{"foo/**/x", "**"}},
+		{"foo/1/2/x", []string{"foo/**/x", "**"}},
+	}
+	for i, c := range cases {
+		x := NewGlobKey(c.x, "/")
+		var y []string
+		for _, leaf := range r.Match(x) {
+			y = append(y, leaf.Key.StringWith("/"))
+		}
+		if !reflect.DeepEqual(y, c.y) {
+			t.Errorf("bad case %v: expected %v, got %v", i+1, c.y, y)
+		}
+	}
+}
+
 func TestWalkPrefix(t *testing.T) {
 	r := New()
 

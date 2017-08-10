@@ -124,9 +124,9 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 func (p *Tree) Delete(k Key) (interface{}, bool) {
 	var (
 		parent *node
-		label  Label
+		label Label
 
-		n      = p.root
+		n = p.root
 		search = k
 	)
 
@@ -243,9 +243,9 @@ func (p *Tree) Get(k Key) (interface{}, bool) {
 
 		n := e.node
 		// Consume the search prefix
-		if isPrefixOfLiteralKey(n.prefix, k) {
+		if i := prefixOfLiteralKey(n.prefix, k); i > 0 {
 			t := &Tree{root: n}
-			return t.Get(k[len(n.prefix):])
+			return t.Get(k[i:])
 		}
 
 	} else if p.root.isLeaf() {
@@ -268,9 +268,9 @@ func (p *Tree) match(k Key) (leaves []Leaf) {
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if isPrefixOfLiteralKey(n.prefix, k) {
+			if i := prefixOfLiteralKey(n.prefix, k); i > 0 {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.match(k[len(n.prefix):])...)
+				leaves = append(leaves, t.match(k[i:])...)
 			}
 		}
 	} else if p.root.isLeaf() {
@@ -297,14 +297,14 @@ func (p *Tree) longestPrefix(k Key) (leaves []Leaf) {
 		for _, e := range p.root.search(k[0]) {
 			n := e.node
 			// Consume the search prefix
-			if isPrefixOfLiteralKey(n.prefix, k) {
+			if i := prefixOfLiteralKey(n.prefix, k); i > 0 {
 				t := &Tree{root: n}
-				leaves = append(leaves, t.longestPrefix(k[len(n.prefix):])...)
+				leaves = append(leaves, t.longestPrefix(k[i:])...)
 			}
 		}
 
 		var (
-			longestSize   int
+			longestSize int
 			longestLeaves []Leaf
 		)
 		for _, l := range leaves {
@@ -337,9 +337,9 @@ func (p *Tree) WalkPrefix(prefix Key, fn WalkFn) {
 
 	for _, e := range p.root.search(prefix[0]) {
 		n := e.node
-		if isPrefixOfLiteralKey(n.prefix, prefix) {
+		if i := prefixOfLiteralKey(n.prefix, prefix); i > 0 {
 			t := &Tree{root: n}
-			t.WalkPrefix(prefix[len(n.prefix):], fn)
+			t.WalkPrefix(prefix[i:], fn)
 		} else if longestPrefix(n.prefix, prefix) == len(prefix) {
 			recursiveWalk(n, fn)
 		}
@@ -361,9 +361,9 @@ func (p *Tree) WalkPath(path Key, fn WalkFn) {
 
 	for _, e := range p.root.search(path[0]) {
 		n := e.node
-		if isPrefixOfLiteralKey(n.prefix, path) {
+		if i := prefixOfLiteralKey(n.prefix, path); i > 0 {
 			t := &Tree{root: n}
-			t.WalkPath(path[len(n.prefix):], fn)
+			t.WalkPath(path[i:], fn)
 		}
 	}
 }

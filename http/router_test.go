@@ -52,10 +52,10 @@ func TestRouter_HandleFuncParallel(t *testing.T) {
 func TestRouter_Match(t *testing.T) {
 	routes := []Route{
 		{},
-		//{Path: "/"},
-		//{Path: "/v1"},
-		//{Path: "/v1/x"},
-		//{Path: "/v1/*"},
+		{Path: "/"},
+		{Path: "/v1"},
+		{Path: "/v1/x"},
+		{Path: "/v1/*"},
 	}
 
 	router := NewRouter()
@@ -65,10 +65,6 @@ func TestRouter_Match(t *testing.T) {
 				w.Header().Add("Y", s)
 			}
 		}(route.String()))
-	}
-
-	for _, route := range router.Routes() {
-		t.Log(route)
 	}
 
 	cases := []struct {
