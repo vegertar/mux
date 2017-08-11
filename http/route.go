@@ -8,7 +8,15 @@ import (
 	"github.com/vegertar/mux/x/radix"
 )
 
-var globSlice = []string{"*"}
+const (
+	glob = "*"
+	wildcards = "**"
+)
+
+var (
+	globSlice = []string{glob}
+	wildcardsSlice = []string{wildcards}
+)
 
 // Route is the HTTP route component configure.
 type Route struct {
@@ -21,7 +29,7 @@ type Route struct {
 
 // String returns the string representation.
 func (r Route) String() string {
-	scheme, method, host, path := "*", "*", "*", "*"
+	scheme, method, host, path := glob, glob, wildcards, wildcards
 	if len(r.Scheme) > 0 {
 		scheme = strings.ToLower(r.Scheme)
 	}
@@ -32,9 +40,9 @@ func (r Route) String() string {
 		host = strings.ToLower(r.Host)
 	}
 	if len(r.Path) > 0 {
-		path = strings.ToLower(r.Path)
+		path = strings.TrimPrefix(strings.ToLower(r.Path), "/")
 	}
-	return fmt.Sprintf("%s %s://%s%s", method, scheme, host, path)
+	return fmt.Sprintf("%s %s://%s/%s", method, scheme, host, path)
 }
 
 func newRoute(r Route) (x.Route, error) {
@@ -72,7 +80,7 @@ func newRoute(r Route) (x.Route, error) {
 	if len(r.Host) > 0 {
 		key, err = f(strings.Split(strings.ToLower(r.Host), "."))
 	} else {
-		key, err = f(globSlice)
+		key, err = f(wildcardsSlice)
 	}
 	if err != nil {
 		return nil, err
@@ -82,7 +90,7 @@ func newRoute(r Route) (x.Route, error) {
 	if len(r.Path) > 0 {
 		key, err = f(strings.Split(strings.ToLower(r.Path), "/"))
 	} else {
-		key, err = f(globSlice)
+		key, err = f(wildcardsSlice)
 	}
 	if err != nil {
 		return nil, err

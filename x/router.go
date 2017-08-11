@@ -125,7 +125,7 @@ func (p *Router) route(leaf *Label) Route {
 		}
 		leaf = up.Clone()
 	}
-	for i, j := 0, len(route) - 1; i < j; i, j = i+1, j-1 {
+	for i, j := 0, len(route)-1; i < j; i, j = i+1, j-1 {
 		route[i], route[j] = route[j], route[i]
 	}
 	return route

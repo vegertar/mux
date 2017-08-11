@@ -124,9 +124,9 @@ func (p *Tree) Insert(k Key, v interface{}) (interface{}, bool) {
 func (p *Tree) Delete(k Key) (interface{}, bool) {
 	var (
 		parent *node
-		label Label
+		label  Label
 
-		n = p.root
+		n      = p.root
 		search = k
 	)
 
@@ -243,11 +243,10 @@ func (p *Tree) Get(k Key) (interface{}, bool) {
 
 		n := e.node
 		// Consume the search prefix
-		if i := isPrefixOfLiteralKey(n.prefix, k); i > 0 {
+		if i := len(n.prefix); i <= len(k) && n.prefix.Equal(k[:i]) {
 			t := &Tree{root: n}
 			return t.Get(k[i:])
 		}
-
 	} else if p.root.isLeaf() {
 		return p.root.leaf.Value, true
 	}
@@ -258,7 +257,9 @@ func (p *Tree) Get(k Key) (interface{}, bool) {
 // Match is used to lookup a specific key, returning all matched leaves.
 func (p *Tree) Match(k Key) (leaves []Leaf) {
 	v := p.match(k)
-	sort.Sort(sortLeafByPattern(v))
+	if len(v) > 1 {
+		sort.Sort(sortLeafByPattern(v))
+	}
 	return v
 }
 
@@ -304,7 +305,7 @@ func (p *Tree) longestPrefix(k Key) (leaves []Leaf) {
 		}
 
 		var (
-			longestSize int
+			longestSize   int
 			longestLeaves []Leaf
 		)
 		for _, l := range leaves {

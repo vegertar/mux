@@ -13,9 +13,9 @@ type Label struct {
 	Value
 	Key radix.Key
 
-	h   list.List
-	m   list.List
-	mu  sync.RWMutex
+	h  list.List
+	m  list.List
+	mu sync.RWMutex
 }
 
 // Clone returns a shadow copy
@@ -175,8 +175,8 @@ func (p *RadixNode) Match(route Route) (leaves []*Label) {
 				continue
 			}
 
-			// check if label is a leaf TODO:
-			if len(route) == 1 || label.Down == nil && len(label.Key) > 1 && label.Key.Wildcard() {
+			// check if label is a leaf
+			if len(route) == 1 || label.Down == nil && label.Key.Wildcards() {
 				leaves = append(leaves, label)
 				continue
 			}

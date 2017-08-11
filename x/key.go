@@ -14,7 +14,7 @@ func NewStringKey(s, separator string) (radix.Key, error) {
 
 // NewStringSliceKey creates a key from a string literal slice.
 func NewStringSliceKey(v []string) (radix.Key, error) {
-	var key radix.Key
+	key := make(radix.Key, 0, len(v))
 	for _, s := range v {
 		label, err := NewLiteralLabel(s)
 		if err != nil {
@@ -32,7 +32,7 @@ func NewGlobKey(s, separator string) (radix.Key, error) {
 
 // NewGlobSliceKey creates a glob patterned key from a string slice.
 func NewGlobSliceKey(v []string) (radix.Key, error) {
-	var key radix.Key
+	key := make(radix.Key, 0, len(v))
 	for _, s := range v {
 		label, err := NewLabel(s)
 		if err != nil {
@@ -44,8 +44,9 @@ func NewGlobSliceKey(v []string) (radix.Key, error) {
 }
 
 type globLabel struct {
-	glob glob.Glob
-	text string
+	glob      glob.Glob
+	text      string
+	wildcards bool
 }
 
 // Literal implements `radix.Label` interface.
@@ -67,6 +68,11 @@ func (p *globLabel) Match(s string) bool {
 	return p.text == s
 }
 
+// Wildcards implements `radix.Label` interface.
+func (p *globLabel) Wildcards() bool {
+	return p.wildcards
+}
+
 // NewLabel creates an empty label from either a glob pattern text or a string literal.
 func NewLabel(s string) (radix.Label, error) {
 	p := new(globLabel)
@@ -77,6 +83,7 @@ func NewLabel(s string) (radix.Label, error) {
 			return nil, err
 		}
 		p.glob = g
+		p.wildcards = len(s) > 1 && strings.Trim(s, "*") == ""
 	}
 
 	return p, nil

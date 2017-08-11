@@ -127,16 +127,16 @@ func isPrefixOfLiteralKey(x, y Key) int {
 
 type node struct {
 	// leaf is used to store possible leaf
-	leaf   *Leaf
+	leaf *Leaf
 
 	// prefix is the common prefix we ignore
 	prefix Key
 
 	// edges should be stored in-order for iteration and searching.
-	edges  struct {
-		       literalEdges   []edge
-		       patternedEdges []edge
-	       }
+	edges struct {
+		literalEdges   []edge
+		patternedEdges []edge
+	}
 }
 
 func (p *node) size() int {
@@ -165,7 +165,7 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i + 1:]...)
+			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i+1:]...)
 		}
 	} else {
 		x := p.edges.patternedEdges
@@ -173,7 +173,7 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i + 1:]...)
+			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i+1:]...)
 		}
 	}
 }

@@ -85,7 +85,7 @@ func (p *globLabel) Match(subj string) bool {
 		}
 
 		// Trim evaluated text from subj as we loop over the pattern.
-		subj = subj[idx + len(p.parts[i]):]
+		subj = subj[idx+len(p.parts[i]):]
 	}
 
 	// Reached the last section. Requires special handling.
@@ -105,8 +105,8 @@ func (p *globLabel) Wildcards() bool {
 // newGlobLabel creates a glob patterned label which can use '*' to match any string.
 func newGlobLabel(s string) *globLabel {
 	return &globLabel{
-		s: s,
-		parts: strings.Split(s, glob),
+		s:         s,
+		parts:     strings.Split(s, glob),
 		wildcards: len(s) > 1 && strings.Trim(s, glob) == "",
 	}
 }
@@ -124,13 +124,13 @@ func (k Key) split(f func(Label) bool) []Key {
 
 	for i, label := range k {
 		if f(label) {
-			out = append(out, k[last + 1:i])
+			out = append(out, k[last+1:i])
 			last = i
 		}
 	}
 
 	if last >= 0 {
-		out = append(out, k[last + 1:])
+		out = append(out, k[last+1:])
 	} else {
 		out = append(out, k)
 	}
@@ -159,7 +159,7 @@ func (k Key) Match(x Key) bool {
 	}
 
 	leadingGlob := k[0].Wildcards()
-	trailingGlob := k[len(k) - 1].Wildcards()
+	trailingGlob := k[len(k)-1].Wildcards()
 
 	parts := k.split(func(l Label) bool {
 		return l.Wildcards()
@@ -180,8 +180,8 @@ func (k Key) Match(x Key) bool {
 		idx := -1
 		y := parts[i]
 		n := len(y)
-		for j := 0; j + n <= len(x); j++ {
-			if y.matchExactly(x[j:j + n]) {
+		for j := 0; j+n <= len(x); j++ {
+			if y.matchExactly(x[j : j+n]) {
 				idx = j
 				break
 			}
@@ -201,7 +201,7 @@ func (k Key) Match(x Key) bool {
 		}
 
 		// Trim evaluated label from x as we loop over the pattern.
-		x = x[idx + n:]
+		x = x[idx+n:]
 	}
 
 	// Reached the last section. Requires special handling.
@@ -209,16 +209,29 @@ func (k Key) Match(x Key) bool {
 		return true
 	}
 	if y := parts[end]; len(x) >= len(y) {
-		return y.matchExactly(x[len(x) - len(y):])
+		return y.matchExactly(x[len(x)-len(y):])
 	}
 	return false
 }
 
-// Is returns if key equals to given strings.
+// Is returns if key equals given strings.
 func (k Key) Is(x ...string) bool {
 	if len(k) == len(x) {
 		for i, label := range k {
 			if label.String() != x[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// Equal returns if key equals given strings.
+func (k Key) Equal(x Key) bool {
+	if len(k) == len(x) {
+		for i, label := range k {
+			if label.String() != x[i].String() {
 				return false
 			}
 		}
@@ -263,7 +276,7 @@ func (k Key) Strings() []string {
 func NewCharKey(s string) Key {
 	var (
 		last = -1
-		v    []string
+		v    = make([]string, 0, len(s))
 	)
 	for i := range s {
 		if last != -1 {

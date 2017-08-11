@@ -1,8 +1,8 @@
 package radix
 
 import (
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func TestGlobLabel_Match(t *testing.T) {
@@ -71,7 +71,7 @@ func TestGlobKey_Match(t *testing.T) {
 	for i, c := range cases {
 		key := NewGlobSliceKey(c.pattern)
 		if key.Match(NewGlobSliceKey(c.s)) != c.matched {
-			t.Errorf("bad case %d: %v", i + 1, c)
+			t.Errorf("bad case %d: %v", i+1, c)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func TestNewCharKey(t *testing.T) {
 	for i, c := range cases {
 		y := NewCharKey(c.x).Strings()
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
+			t.Errorf("bad case %v: expected %v, got %v", i+1, c.y, y)
 		}
 	}
 }
