@@ -12,11 +12,17 @@ type Leaf struct {
 
 type sortLeafByPattern []Leaf
 
-func (l sortLeafByPattern) Len() int { return len(l) }
+func (l sortLeafByPattern) Len() int {
+	return len(l)
+}
 
-func (l sortLeafByPattern) Less(i, j int) bool { return lessKey(l[i].Key, l[j].Key) }
+func (l sortLeafByPattern) Less(i, j int) bool {
+	return lessKey(l[i].Key, l[j].Key)
+}
 
-func (l sortLeafByPattern) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
+func (l sortLeafByPattern) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
 
 // edge is used to represent an edge node
 type edge struct {
@@ -26,19 +32,31 @@ type edge struct {
 
 type sortEdgeByLiteral []edge
 
-func (e sortEdgeByLiteral) Len() int { return len(e) }
+func (e sortEdgeByLiteral) Len() int {
+	return len(e)
+}
 
-func (e sortEdgeByLiteral) Less(i, j int) bool { return e[i].label.String() < e[j].label.String() }
+func (e sortEdgeByLiteral) Less(i, j int) bool {
+	return e[i].label.String() < e[j].label.String()
+}
 
-func (e sortEdgeByLiteral) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e sortEdgeByLiteral) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
+}
 
 type sortEdgeByPattern []edge
 
-func (e sortEdgeByPattern) Len() int { return len(e) }
+func (e sortEdgeByPattern) Len() int {
+	return len(e)
+}
 
-func (e sortEdgeByPattern) Less(i, j int) bool { return lessLabel(e[i].label, e[j].label) }
+func (e sortEdgeByPattern) Less(i, j int) bool {
+	return lessLabel(e[i].label, e[j].label)
+}
 
-func (e sortEdgeByPattern) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+func (e sortEdgeByPattern) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
+}
 
 func lessLabel(x, y Label) bool {
 	a, b := x.String(), y.String()
@@ -84,27 +102,41 @@ func longestPrefix(x, y Key) int {
 	return i
 }
 
-func prefixOfLiteralKey(x, y Key) int {
-	for i := len(x); i <= len(y); i++ {
-		if x.Match(y[:i]) {
-			return i
+func isPrefixOfLiteralKey(x, y Key) int {
+	numWildcards := 0
+	for _, label := range x {
+		if label.Wildcards() {
+			numWildcards++
 		}
 	}
+
+	a, b := len(x), len(y)
+	if numWildcards > 0 {
+		n := a - numWildcards
+		for i := b; i >= n; i-- {
+			if x.Match(y[:i]) {
+				return i
+			}
+		}
+	} else if a <= b && x.Match(y[:a]) {
+		return a
+	}
+
 	return 0
 }
 
 type node struct {
 	// leaf is used to store possible leaf
-	leaf *Leaf
+	leaf   *Leaf
 
 	// prefix is the common prefix we ignore
 	prefix Key
 
 	// edges should be stored in-order for iteration and searching.
-	edges struct {
-		literalEdges   []edge
-		patternedEdges []edge
-	}
+	edges  struct {
+		       literalEdges   []edge
+		       patternedEdges []edge
+	       }
 }
 
 func (p *node) size() int {
@@ -133,7 +165,7 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i+1:]...)
+			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i + 1:]...)
 		}
 	} else {
 		x := p.edges.patternedEdges
@@ -141,7 +173,7 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i+1:]...)
+			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i + 1:]...)
 		}
 	}
 }

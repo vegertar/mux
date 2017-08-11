@@ -10,7 +10,7 @@ import (
 func randomString(n int) string {
 	b := make([]byte, 0, n)
 	for i := 0; i < n; i++ {
-		b = append(b, byte(rand.Intn(95)+32))
+		b = append(b, byte(rand.Intn(95) + 32))
 	}
 	return string(b)
 }
@@ -149,7 +149,7 @@ func TestDeletePrefix(t *testing.T) {
 		r.Walk(fn)
 
 		if !reflect.DeepEqual(y, c.y) {
-			t.Fatalf("bad case %v: expected %v, got %v", i+1, c.y, y)
+			t.Fatalf("bad case %v: expected %v, got %v", i + 1, c.y, y)
 		}
 	}
 }
@@ -257,7 +257,7 @@ func TestLongestPrefix_Glob(t *testing.T) {
 			y = append(y, leaf.Key.StringWith("/"))
 		}
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %v: expected %v, got %v", i+1, c.y, y)
+			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
 		}
 	}
 }
@@ -266,15 +266,15 @@ func TestMatch_Glob(t *testing.T) {
 	r := New()
 
 	keys := []string{
-		//"*",
-		//"**",
-		//"foo",
-		//"foo/bar",
-		//"foo/*/baz",
-		//"foo/bar/baz/zip",
-		//"foo/bar/baz/*",
-		//"foo/bar/baz/**",
-		//"foo/zip*",
+		"*",
+		"**",
+		"foo",
+		"foo/bar",
+		"foo/*/baz",
+		"foo/bar/baz/zip",
+		"foo/bar/baz/*",
+		"foo/bar/baz/**",
+		"foo/zip*",
 		"foo/**/x",
 	}
 	for _, k := range keys {
@@ -311,7 +311,7 @@ func TestMatch_Glob(t *testing.T) {
 			y = append(y, leaf.Key.StringWith("/"))
 		}
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %v: expected %v, got %v", i+1, c.y, y)
+			t.Errorf("bad case %v: expected %v, got %v", i + 1, c.y, y)
 		}
 	}
 }

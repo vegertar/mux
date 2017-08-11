@@ -128,8 +128,11 @@ func (k Key) split(f func(Label) bool) []Key {
 			last = i
 		}
 	}
-	if last >= 0 && last < len(k) - 1 {
+
+	if last >= 0 {
 		out = append(out, k[last + 1:])
+	} else {
+		out = append(out, k)
 	}
 
 	return out
