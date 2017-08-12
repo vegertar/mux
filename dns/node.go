@@ -18,11 +18,17 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 		typeAndClass := route[1:]
 		qtype := route[1][0].String()
 
-		for _, nameLeaf := range nameLeaves {
+		for index, nameLeaf := range nameLeaves {
 			// then matches qtype and qclass
-			v := nameLeaf.Node.Match(typeAndClass)
+			down := nameLeaf.Down
+			v := down.Match(typeAndClass)
 			noData := true
+
 			for i, leaf := range v {
+				// remains middleware only for non-first matches
+				if index > 0 {
+					leaf.Handler = nil
+				}
 				if len(leaf.Handler) > 0 {
 					noData = false
 					var middleware Middleware
@@ -44,7 +50,7 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 				}
 			}
 
-			if noData {
+			if index == 0 && noData {
 				// domain is existed, but no exactly matched data
 				switch qtype {
 				case "CNAME", "NS":
@@ -57,7 +63,7 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 					if err != nil {
 						panic(err)
 					}
-					labels := nameLeaf.Node.Match(x.Route{cnameKey, route[2]})
+					labels := down.Match(x.Route{cnameKey, route[2]})
 					for i, leaf := range labels {
 						if len(leaf.Handler) > 0 {
 							noData = false
@@ -72,7 +78,7 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 						if err != nil {
 							panic(err)
 						}
-						labels = nameLeaf.Node.Match(x.Route{nsKey, route[2]})
+						labels = down.Match(x.Route{nsKey, route[2]})
 						for i, leaf := range labels {
 							if len(leaf.Handler) > 0 {
 								noData = false
@@ -93,7 +99,7 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 					if err != nil {
 						panic(err)
 					}
-					labels := nameLeaf.Node.Match(x.Route{soaKey, route[2]})
+					labels := down.Match(x.Route{soaKey, route[2]})
 					for i, leaf := range labels {
 						if len(leaf.Handler) > 0 {
 							noData = false
@@ -106,16 +112,15 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 						v = append(v, labels...)
 					}
 				}
+
+				if noData {
+					noError := new(x.Label)
+					noError.Key = nameLeaf.Key
+					noError.Handler = []interface{}{NoErrorHandler}
+					v = append(v, noError)
+				}
 			}
 
-			// needs to clear name handlers
-			nameLeaf.Handler = nil
-			if noData {
-				nameLeaf.Handler = []interface{}{NoErrorHandler}
-			}
-			if len(nameLeaf.Handler) > 0 || len(nameLeaf.Middleware) > 0 {
-				leaves = append(leaves, nameLeaf)
-			}
 			leaves = append(leaves, v...)
 		}
 
@@ -148,7 +153,7 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 					continue
 				}
 
-				r := Name(ns.Target)
+				r := Route{Name: ns.Target}
 				r.UseLiteral = true
 				r.Type = qtype
 
@@ -186,7 +191,7 @@ func (p *Node) soaMiddleware(nameError bool) Middleware {
 						nsQuestion := &Request{Msg: new(dns.Msg)}
 						nsQuestion.SetQuestion(req.Msg.Question[0].Name, dns.TypeNS)
 
-						r := Name(req.Msg.Question[0].Name)
+						r := Route{Name: req.Msg.Question[0].Name}
 						r.UseLiteral = true
 						r.Type = "NS"
 
@@ -233,7 +238,7 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 					continue
 				}
 
-				r := Name(ns.Ns)
+				r := Route{Name: ns.Ns}
 				r.UseLiteral = true
 
 				glueQuestion.SetQuestion(ns.Ns, dns.TypeA)

@@ -108,7 +108,7 @@ func (p *Router) leaf(r Route) *Label {
 			node = leaf.getDown(p.Breed)
 		}
 
-		leaf = node.Get(k, true)
+		leaf = node.Get(k, true, node)
 	}
 
 	return leaf

@@ -98,10 +98,6 @@ func (p *responseWriter) WriteMsg(msg *dns.Msg) error {
 	return nil
 }
 
-func (p *responseWriter) Writer() dns.ResponseWriter {
-	return p.ResponseWriter
-}
-
 // A Request represents a DNS request received by a server.
 type Request struct {
 	*dns.Msg

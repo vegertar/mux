@@ -109,7 +109,7 @@ func (p *Label) setupMiddleware(m []interface{}) CloseFunc {
 // A node should implement concurrent safety.
 type Node interface {
 	// Get returns a label from this Node.
-	Get(key radix.Key, createIfMissing bool) *Label
+	Get(key radix.Key, createIfMissing bool, useNode Node) *Label
 
 	// Delete deletes a label.
 	Delete(label *Label)
@@ -212,7 +212,7 @@ func (p *RadixNode) Leaves() (leaves []*Label) {
 }
 
 // Get implements the `Node` interface.
-func (p *RadixNode) Get(k radix.Key, createIfMissing bool) *Label {
+func (p *RadixNode) Get(k radix.Key, createIfMissing bool, useNode Node) *Label {
 	p.mu.RLock()
 	value, ok := p.tree.Get(k)
 	p.mu.RUnlock()
@@ -223,7 +223,7 @@ func (p *RadixNode) Get(k radix.Key, createIfMissing bool) *Label {
 	if createIfMissing {
 		label := new(Label)
 		label.Key = k
-		label.Node = p
+		label.Node = useNode
 
 		p.mu.Lock()
 		p.tree.Insert(k, label)

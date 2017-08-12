@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -74,7 +75,7 @@ func TestRouter_UseFuncParallel(t *testing.T) {
 	}
 }
 
-func TestRouter_ServeHTTP(t *testing.T) {
+func TestRouter_ServeDNS(t *testing.T) {
 	routes := []Route{
 		{},
 		{Name: "v1"},
@@ -100,5 +101,42 @@ func TestRouter_ServeHTTP(t *testing.T) {
 	}
 	if n := len(router.Routes()); n != len(routes) {
 		t.Fatalf("expected %d routes, got %d", len(routes), n)
+	}
+
+	cases := []struct {
+		x Route
+		y []string
+	}{
+		{Route{Name: "v1"}, []string{
+			"v1 A IN",
+		}},
+		{Route{Name: "v1."}, []string{
+			"v1 A IN",
+		}},
+		{Route{Name: "v1.x"}, []string{
+			"v1.x A IN",
+		}},
+		{Route{Name: "v1.y"}, []string{
+			"v1.* A IN",
+		}},
+	}
+
+	for i, c := range cases {
+		c.x.UseLiteral = true
+
+		request := &Request{
+			Msg: new(dns.Msg),
+		}
+		request.SetQuestion(c.x.Name, dns.TypeA)
+		w := new(responseWriter)
+
+		router.ServeDNS(w, request)
+		var y []string
+		for _, rr := range w.msg.Answer {
+			y = append(y, rr.Header().Name)
+		}
+		if !reflect.DeepEqual(y, c.y) {
+			t.Errorf("bad case %d: expected %v, got %v", i+1, c.y, y)
+		}
 	}
 }

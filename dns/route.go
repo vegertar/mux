@@ -9,6 +9,8 @@ import (
 	"github.com/vegertar/mux/x/radix"
 )
 
+const wildcards = "**"
+
 var (
 	nsType    = []string{"NS"}
 	soaType   = []string{"SOA"}
@@ -19,7 +21,7 @@ var (
 
 // Route is the DNS route component configure.
 type Route struct {
-	Name       string `json:"name,omitempty" default:"."`
+	Name       string `json:"name,omitempty" default:"**"`
 	Type       string `json:"type,omitempty" default:"A"`
 	Class      string `json:"class,omitempty" default:"IN"`
 	UseLiteral bool   `json:"useLiteral,omitempty"`
@@ -27,7 +29,7 @@ type Route struct {
 
 // String returns the string representation.
 func (r Route) String() string {
-	name, typ, class := ".", "A", "IN"
+	name, typ, class := wildcards, "A", "IN"
 	if len(r.Name) > 0 {
 		name = strings.ToLower(r.Name)
 	}
@@ -55,12 +57,9 @@ func newRoute(r Route) (x.Route, error) {
 	if len(r.Name) > 0 {
 		r.Name = strings.ToLower(r.Name)
 	} else {
-		r.Name = "."
+		r.Name = wildcards
 	}
 	name := dns.SplitDomainName(r.Name)
-	// Since dns.SplitDomainName returns nil for root label,
-	// so we append an empty label here for intercepting the root label.
-	name = append(name, "")
 	reverse(name)
 
 	key, err = f(name)
@@ -92,19 +91,12 @@ func newRoute(r Route) (x.Route, error) {
 	return v, nil
 }
 
-// RR creates a route from RR records.
+// RR creates a route from a RR record.
 func RR(r dns.RR) Route {
 	return Route{
-		Name:  strings.ToLower(r.Header().Name),
+		Name:  r.Header().Name,
 		Type:  dns.TypeToString[r.Header().Rrtype],
 		Class: dns.ClassToString[r.Header().Class],
-	}
-}
-
-// Name creates a route from a domain name with default type A and class IN.
-func Name(s string) Route {
-	return Route{
-		Name: strings.ToLower(s),
 	}
 }
 

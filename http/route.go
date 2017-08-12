@@ -9,21 +9,21 @@ import (
 )
 
 const (
-	glob = "*"
+	glob      = "*"
 	wildcards = "**"
 )
 
 var (
-	globSlice = []string{glob}
+	globSlice      = []string{glob}
 	wildcardsSlice = []string{wildcards}
 )
 
 // Route is the HTTP route component configure.
 type Route struct {
-	Scheme     string `json:"scheme,omitempty"`
-	Method     string `json:"method,omitempty"`
-	Host       string `json:"host,omitempty"`
-	Path       string `json:"path,omitempty"`
+	Scheme     string `json:"scheme,omitempty" default:"*"`
+	Method     string `json:"method,omitempty" default:"*"`
+	Host       string `json:"host,omitempty" default:"**"`
+	Path       string `json:"path,omitempty" default:"**"`
 	UseLiteral bool   `json:"useLiteral,omitempty"`
 }
 
