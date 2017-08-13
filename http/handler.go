@@ -82,8 +82,11 @@ func newHandlerFromLabels(labels []*x.Label) http.Handler {
 		handlers   []interface{}
 		middleware []interface{}
 	)
-	for _, label := range labels {
-		handlers = append(handlers, label.Handler...)
+	for i, label := range labels {
+		if i == 0 {
+			// remains the first matched handlers only
+			handlers = append(handlers, label.Handler...)
+		}
 		middleware = append(middleware, label.Middleware...)
 	}
 	if len(handlers) > 0 {

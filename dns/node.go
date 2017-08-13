@@ -5,7 +5,7 @@ import (
 	"github.com/vegertar/mux/x"
 )
 
-// Node derives the `x.RadixNode` with specialized dns matching.
+// Node derives the `x.RadixNode` with specialized DNS matching.
 type Node struct {
 	*x.RadixNode
 }

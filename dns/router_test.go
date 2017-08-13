@@ -98,27 +98,70 @@ func TestRouter_ServeDNS(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		_, err = router.UseFunc(route, func(s string) MiddlewareFunc {
+			return func(h Handler) Handler {
+				return HandlerFunc(func(w ResponseWriter, r *Request) {
+					a := new(dns.A)
+					a.Hdr.Name = s
+					w.Extra(a)
+					h.ServeDNS(w, r)
+				})
+			}
+		}(route.String()))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if n := len(router.Routes()); n != len(routes) {
 		t.Fatalf("expected %d routes, got %d", len(routes), n)
 	}
 
 	cases := []struct {
-		x Route
-		y []string
+		x    Route
+		y, z []string
 	}{
-		{Route{Name: "v1"}, []string{
-			"v1 A IN",
-		}},
-		{Route{Name: "v1."}, []string{
-			"v1 A IN",
-		}},
-		{Route{Name: "v1.x"}, []string{
-			"v1.x A IN",
-		}},
-		{Route{Name: "v1.y"}, []string{
-			"v1.* A IN",
-		}},
+		{
+			Route{Name: "v1"},
+			[]string{
+				"v1 A IN",
+			},
+			[]string{
+				"v1 A IN",
+				"** A IN",
+			},
+		},
+		{
+			Route{Name: "v1."},
+			[]string{
+				"v1 A IN",
+			},
+			[]string{
+				"v1 A IN",
+				"** A IN",
+			},
+		},
+		{
+			Route{Name: "v1.x"},
+			[]string{
+				"v1.x A IN",
+			},
+			[]string{
+				"v1.x A IN",
+				"v1.* A IN",
+				"** A IN",
+			},
+		},
+		{
+			Route{Name: "v1.y"},
+			[]string{
+				"v1.* A IN",
+			},
+			[]string{
+				"v1.* A IN",
+				"** A IN",
+			},
+		},
 	}
 
 	for i, c := range cases {
@@ -131,12 +174,18 @@ func TestRouter_ServeDNS(t *testing.T) {
 		w := new(responseWriter)
 
 		router.ServeDNS(w, request)
-		var y []string
+		var y, z []string
 		for _, rr := range w.msg.Answer {
 			y = append(y, rr.Header().Name)
 		}
+		for _, rr := range w.msg.Extra {
+			z = append(z, rr.Header().Name)
+		}
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %d: expected %v, got %v", i+1, c.y, y)
+			t.Errorf("bad case %d for y: expected %v, got %v", i+1, c.y, y)
+		}
+		if !reflect.DeepEqual(z, c.z) {
+			t.Errorf("bad case %d for z: expected %v, got %v", i+1, c.z, z)
 		}
 	}
 }

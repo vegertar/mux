@@ -97,59 +97,137 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		_, err = router.UseFunc(route, func(s string) MiddlewareFunc {
+			return func(h http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Add("Z", s)
+					h.ServeHTTP(w, r)
+				})
+			}
+		}(route.String()))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if n := len(router.Routes()); n != len(routes) {
 		t.Fatalf("expected %d routes, got %d", len(routes), n)
 	}
 
 	cases := []struct {
-		x Route
-		y []string
+		x    Route
+		y, z []string
 	}{
-		{Route{Path: "/"}, []string{
-			"* *://**/",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v1"}, []string{
-			"* *://**/v1",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v1/"}, []string{
-			"* *://**/v1/*",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v1/x"}, []string{
-			"* *://**/v1/x",
-			"* *://**/v1/*",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v1/y"}, []string{
-			"* *://**/v1/*",
-			"* *://**/**",
-		}},
-		{Route{Path: "/hello"}, []string{
-			"* *://**/**",
-		}},
-		{Route{Path: "/v2"}, []string{
-			"* *://**/v[2-3]",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v3"}, []string{
-			"* *://**/v[2-3]",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v4"}, []string{
-			"* *://**/**",
-		}},
-		{Route{Path: "/v4/x"}, []string{
-			"* *://**/v4/**/x",
-			"* *://**/**",
-		}},
-		{Route{Path: "/v4/1/x"}, []string{
-			"* *://**/v4/*/**/x",
-			"* *://**/v4/**/x",
-			"* *://**/**",
-		}},
+		{
+			Route{Path: "/"},
+			[]string{
+				"* *://**/",
+			},
+			[]string{
+				"* *://**/",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v1"},
+			[]string{
+				"* *://**/v1",
+			},
+			[]string{
+				"* *://**/v1",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v1/"},
+			[]string{
+				"* *://**/v1/*",
+			},
+			[]string{
+				"* *://**/v1/*",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v1/x"},
+			[]string{
+				"* *://**/v1/x",
+			},
+			[]string{
+				"* *://**/v1/x",
+				"* *://**/v1/*",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v1/y"},
+			[]string{
+				"* *://**/v1/*",
+			},
+			[]string{
+				"* *://**/v1/*",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/hello"},
+			[]string{
+				"* *://**/**",
+			},
+			[]string{
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v2"},
+			[]string{
+				"* *://**/v[2-3]",
+			},
+			[]string{
+				"* *://**/v[2-3]",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v3"},
+			[]string{
+				"* *://**/v[2-3]",
+			},
+			[]string{
+				"* *://**/v[2-3]",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v4"},
+			[]string{
+				"* *://**/**",
+			},
+			[]string{
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v4/x"},
+			[]string{
+				"* *://**/v4/**/x",
+			},
+			[]string{
+				"* *://**/v4/**/x",
+				"* *://**/**",
+			},
+		},
+		{
+			Route{Path: "/v4/1/x"},
+			[]string{
+				"* *://**/v4/*/**/x",
+			},
+			[]string{
+				"* *://**/v4/*/**/x",
+				"* *://**/v4/**/x",
+				"* *://**/**",
+			},
+		},
 	}
 
 	for i, c := range cases {
@@ -177,8 +255,12 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		w := newHeaderWriter()
 		router.ServeHTTP(w, request)
 		y := w.Header()["Y"]
+		z := w.Header()["Z"]
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %d: expected %v, got %v", i+1, c.y, y)
+			t.Errorf("bad case %d for y: expected %v, got %v", i+1, c.y, y)
+		}
+		if !reflect.DeepEqual(z, c.z) {
+			t.Errorf("bad case %d for z: expected %v, got %v", i+1, c.z, z)
 		}
 	}
 }
