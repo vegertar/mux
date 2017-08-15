@@ -76,6 +76,42 @@ func TestGlobKey_Match(t *testing.T) {
 	}
 }
 
+func TestGlobKey_Capture(t *testing.T) {
+	type exp struct {
+		pattern, x []string
+		y          [][]string
+	}
+
+	cases := []exp{
+		{[]string{""}, []string{""}, nil},
+		{[]string{"*"}, []string{""}, [][]string{[]string{""}}},
+		{[]string{"*"}, []string{"ab"}, [][]string{[]string{"ab"}}},
+		{[]string{"a", "b"}, []string{"a", "b"}, nil},
+		{[]string{"**"}, []string{"a", "b"}, [][]string{[]string{"a", "b"}}},
+		{[]string{"a", "**", "b"}, []string{"a", "b"}, [][]string{nil}},
+		{[]string{"a", "**", "**", "b"}, []string{"a", "b"}, [][]string{nil, nil}},
+		{[]string{"**", "a", "b"}, []string{"a", "b"}, [][]string{nil}},
+		{[]string{"a", "b", "**"}, []string{"a", "b"}, [][]string{nil}},
+		{[]string{"a", "**", "b"}, []string{"a", "1", "2", "3", "b"}, [][]string{[]string{"1", "2", "3"}}},
+		{[]string{"a", "**", "**", "b"}, []string{"a", "1", "2", "3", "b"}, [][]string{[]string{"1", "2", "3"}, nil}},
+		{[]string{"a", "**", "**"}, []string{"a", "1", "2", "3", "b"}, [][]string{[]string{"1", "2", "3", "b"}, nil}},
+		{[]string{"**", "**", "b"}, []string{"a", "1", "2", "3", "b"}, [][]string{[]string{"a", "1", "2", "3"}, nil}},
+		{[]string{"a", "**", "b", "**"}, []string{"a", "1", "2", "3", "b", "c"}, [][]string{[]string{"1", "2", "3"}, []string{"c"}}},
+		{[]string{"**", "a", "**", "b"}, []string{"0", "a", "1", "2", "3", "b"}, [][]string{[]string{"0"}, []string{"1", "2", "3"}}},
+		{[]string{"**", "a", "**", "b", "**"}, []string{"0", "a", "1", "2", "3", "b", "c"}, [][]string{[]string{"0"}, []string{"1", "2", "3"}, []string{"c"}}},
+	}
+	for i, c := range cases {
+		key := NewGlobSliceKey(c.pattern)
+		var y [][]string
+		for _, k := range key.Capture(NewGlobSliceKey(c.x)) {
+			y = append(y, k.Strings())
+		}
+		if !reflect.DeepEqual(y, c.y) {
+			t.Errorf("bad case %d, expected %v, got %v", i+1, c.y, y)
+		}
+	}
+}
+
 func TestNewCharKey(t *testing.T) {
 	type exp struct {
 		x string

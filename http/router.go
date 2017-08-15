@@ -54,7 +54,7 @@ func (p *Router) Match(c Route) http.Handler {
 			http.Error(w, err.Error(), 500)
 		})
 	}
-	return newHandlerFromLabels(p.Router.Match(r))
+	return newHandlerFromLabels(r, p.Router.Match(r))
 }
 
 // Use associates a route with middleware.

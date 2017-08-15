@@ -161,7 +161,7 @@ func newMultiHandler(handler ...interface{}) MultiHandler {
 	return MultiHandler(m)
 }
 
-func newHandlerFromLabels(labels []*x.Label) Handler {
+func newHandlerFromLabels(route x.Route, labels []*x.Label) Handler {
 	var (
 		h Handler = RefusedErrorHandler
 
@@ -169,9 +169,14 @@ func newHandlerFromLabels(labels []*x.Label) Handler {
 		middleware []interface{}
 	)
 
-	for _, label := range labels {
-		handlers = append(handlers, label.Handler...)
-		middleware = append(middleware, label.Middleware...)
+	if len(labels) > 0 {
+		// extracts request variables
+		middleware = append(middleware, getVars(route, labels[0]))
+
+		for _, label := range labels {
+			handlers = append(handlers, label.Handler...)
+			middleware = append(middleware, label.Middleware...)
+		}
 	}
 	if len(handlers) > 0 {
 		h = newMultiHandler(handlers...)
@@ -188,6 +193,44 @@ func newHandlerFromLabels(labels []*x.Label) Handler {
 	}
 	return h
 }
+
+func getVars(route x.Route, label *x.Label) Middleware {
+	return MiddlewareFunc(func(h Handler) Handler {
+		var varsValue VarsValue
+
+		nameKey := label.Node.Up().Node.Up().Key
+		varsValue.Name = append(varsValue.Name, nameKey.StringWith("."))
+		for _, k := range nameKey.Capture(route[len(route)-1]) {
+			varsValue.Name = append(varsValue.Name, k.StringWith("."))
+		}
+
+		return HandlerFunc(func(w ResponseWriter, r *Request) {
+			h.ServeDNS(w, r.WithContext(context.WithValue(r.Context(), varsKey, varsValue)))
+		})
+	})
+}
+
+// Vars returns the route variables for the current request.
+func Vars(r *Request) VarsValue {
+	if v := r.Context().Value(varsKey); v != nil {
+		return v.(VarsValue)
+	}
+	return VarsValue{}
+}
+
+type (
+	contextKey int
+
+	// VarsValue is the value of positional patterns.
+	VarsValue struct {
+		// Name is the value of host patterns in which [0] is the entire pattern, [1] is the first field, etc.
+		Name []string
+	}
+)
+
+const (
+	varsKey contextKey = iota
+)
 
 // ErrorHandler responses a given code to client.
 type ErrorHandler int

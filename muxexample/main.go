@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -79,8 +80,28 @@ func main() {
 		go httpServer.Serve(httpListener)
 	}
 
-	httpRouter.HandleFunc(httpMux.Route{Path:"/pprof/*"}, func(w http.ResponseWriter, r *http.Request) {
-
+	httpRouter.HandleFunc(httpMux.Route{Path: "/pprof/*"}, func(w http.ResponseWriter, r *http.Request) {
+		switch httpMux.Vars(r).Path[1] {
+		case "heap":
+			pprof.Handler("heap").ServeHTTP(w, r)
+		case "goroutine":
+			pprof.Handler("goroutine").ServeHTTP(w, r)
+		case "block":
+			pprof.Handler("block").ServeHTTP(w, r)
+		case "threadcreate":
+			pprof.Handler("threadcreate").ServeHTTP(w, r)
+		case "cmdline":
+			pprof.Cmdline(w, r)
+		case "profile":
+			pprof.Profile(w, r)
+		case "symbol":
+			pprof.Symbol(w, r)
+		case "trace":
+			pprof.Trace(w, r)
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			pprof.Index(w, r)
+		}
 	})
 
 	c := make(chan os.Signal, 1)

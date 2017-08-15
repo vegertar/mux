@@ -255,7 +255,7 @@ func (p *Tree) Get(k Key) (interface{}, bool) {
 }
 
 // Match is used to lookup a specific key, returning all matched leaves.
-func (p *Tree) Match(k Key) (leaves []Leaf) {
+func (p *Tree) Match(k Key) []Leaf {
 	v := p.match(k)
 	if len(v) > 1 {
 		sort.Sort(sortLeafByPattern(v))

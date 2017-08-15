@@ -165,7 +165,9 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.literalEdges = append(p.edges.literalEdges[:i], p.edges.literalEdges[i+1:]...)
+			copy(p.edges.literalEdges[i:], p.edges.literalEdges[i+1:])
+			p.edges.literalEdges[len(p.edges.literalEdges)-1] = edge{}
+			p.edges.literalEdges = p.edges.literalEdges[:len(p.edges.literalEdges)-1]
 		}
 	} else {
 		x := p.edges.patternedEdges
@@ -173,7 +175,9 @@ func (p *node) delEdge(l Label) {
 			return x[i].label.String() >= s
 		})
 		if i < len(x) && x[i].label.String() == s {
-			p.edges.patternedEdges = append(p.edges.patternedEdges[:i], p.edges.patternedEdges[i+1:]...)
+			copy(p.edges.patternedEdges[i:], p.edges.patternedEdges[i+1:])
+			p.edges.patternedEdges[len(p.edges.patternedEdges)-1] = edge{}
+			p.edges.patternedEdges = p.edges.patternedEdges[:len(p.edges.patternedEdges)-1]
 		}
 	}
 }

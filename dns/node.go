@@ -163,7 +163,7 @@ func (p *Node) cnameMiddleware(qtype string) Middleware {
 				}
 
 				recursiveQuestion.SetQuestion(ns.Target, req.Question[0].Qtype)
-				newHandlerFromLabels(p.Match(route)).ServeDNS(recursiveWriter, recursiveQuestion)
+				newHandlerFromLabels(route, p.Match(route)).ServeDNS(recursiveWriter, recursiveQuestion)
 			}
 
 			cnameWriter.WriteMsg(&recursiveWriter.msg)
@@ -200,7 +200,7 @@ func (p *Node) soaMiddleware(nameError bool) Middleware {
 							panic(err)
 						}
 
-						newHandlerFromLabels(p.Match(route)).ServeDNS(nsWriter, nsQuestion)
+						newHandlerFromLabels(route, p.Match(route)).ServeDNS(nsWriter, nsQuestion)
 
 						soaWriter.Ns(nsWriter.msg.Answer...)
 						soaWriter.Extra(nsWriter.msg.Extra...)
@@ -247,7 +247,7 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 				if err != nil {
 					panic(err)
 				}
-				newHandlerFromLabels(p.Match(route)).ServeDNS(glueWriter, glueQuestion)
+				newHandlerFromLabels(route, p.Match(route)).ServeDNS(glueWriter, glueQuestion)
 
 				glueQuestion.SetQuestion(ns.Ns, dns.TypeAAAA)
 				r.Type = "AAAA"
@@ -255,7 +255,7 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 				if err != nil {
 					panic(err)
 				}
-				newHandlerFromLabels(p.Match(route)).ServeDNS(glueWriter, glueQuestion)
+				newHandlerFromLabels(route, p.Match(route)).ServeDNS(glueWriter, glueQuestion)
 			}
 
 			if delegated {

@@ -85,7 +85,7 @@ func (p *globLabel) Match(subj string) bool {
 		}
 
 		// Trim evaluated text from subj as we loop over the pattern.
-		subj = subj[idx+len(p.parts[i]):]
+		subj = subj[idx + len(p.parts[i]):]
 	}
 
 	// Reached the last section. Requires special handling.
@@ -124,13 +124,13 @@ func (k Key) split(f func(Label) bool) []Key {
 
 	for i, label := range k {
 		if f(label) {
-			out = append(out, k[last+1:i])
+			out = append(out, k[last + 1:i])
 			last = i
 		}
 	}
 
 	if last >= 0 {
-		out = append(out, k[last+1:])
+		out = append(out, k[last + 1:])
 	} else {
 		out = append(out, k)
 	}
@@ -152,6 +152,16 @@ func (k Key) matchExactly(x Key) bool {
 	return true
 }
 
+func (k Key) captureExactly(x Key) []Key {
+	var y []Key
+	for i := 0; i < len(k); i++ {
+		if !k[i].Literal() {
+			y = append(y, Key{x[i]})
+		}
+	}
+	return y
+}
+
 // Match returns if key matches another one.
 func (k Key) Match(x Key) bool {
 	if len(k) == 0 {
@@ -159,7 +169,7 @@ func (k Key) Match(x Key) bool {
 	}
 
 	leadingGlob := k[0].Wildcards()
-	trailingGlob := k[len(k)-1].Wildcards()
+	trailingGlob := k[len(k) - 1].Wildcards()
 
 	parts := k.split(func(l Label) bool {
 		return l.Wildcards()
@@ -180,8 +190,8 @@ func (k Key) Match(x Key) bool {
 		idx := -1
 		y := parts[i]
 		n := len(y)
-		for j := 0; j+n <= len(x); j++ {
-			if y.matchExactly(x[j : j+n]) {
+		for j := 0; j + n <= len(x); j++ {
+			if y.matchExactly(x[j : j + n]) {
 				idx = j
 				break
 			}
@@ -201,7 +211,7 @@ func (k Key) Match(x Key) bool {
 		}
 
 		// Trim evaluated label from x as we loop over the pattern.
-		x = x[idx+n:]
+		x = x[idx + n:]
 	}
 
 	// Reached the last section. Requires special handling.
@@ -209,9 +219,64 @@ func (k Key) Match(x Key) bool {
 		return true
 	}
 	if y := parts[end]; len(x) >= len(y) {
-		return y.matchExactly(x[len(x)-len(y):])
+		return y.matchExactly(x[len(x) - len(y):])
 	}
 	return false
+}
+
+// Capture returns sub-keys in which every element has a corresponding pattern in key.
+// This means, key `k` must be matching with given key `x`, i.e. `k.Match(x)` equals true.
+func (k Key) Capture(x Key) []Key {
+	var captures []Key
+
+	if len(k) == 0 {
+		return nil
+	}
+
+	trailingGlob := k[len(k) - 1].Wildcards()
+
+	parts := k.split(func(l Label) bool {
+		return l.Wildcards()
+	})
+
+	if len(parts) <= 1 {
+		return parts[0].captureExactly(x)
+	}
+
+	end := len(parts) - 1
+
+	for i := 0; i < end; i++ {
+		idx := -1
+		y := parts[i]
+		n := len(y)
+
+		for j := 0; j + n <= len(x); j++ {
+			if y.matchExactly(x[j : j + n]) {
+				idx = j
+				break
+			}
+		}
+
+		if idx > 0 {
+			captures = append(captures, x[:idx])
+		}
+		captures = append(captures, y.captureExactly(x[idx:idx + n])...)
+		x = x[idx + n:]
+	}
+
+	if trailingGlob {
+		captures = append(captures, x)
+	} else {
+		y := parts[end]
+		idx := len(x) - len(y)
+		captures = append(captures, x[:idx])
+		captures = append(captures, y.captureExactly(x[idx:])...)
+	}
+	for i := end-1; i > 0 && len(parts[i]) == 0; i-- {
+		captures = append(captures, nil)
+	}
+
+	return captures
 }
 
 // Is returns if key equals given strings.
@@ -276,7 +341,7 @@ func (k Key) Strings() []string {
 func NewCharKey(s string) Key {
 	var (
 		last = -1
-		v    = make([]string, 0, len(s))
+		v = make([]string, 0, len(s))
 	)
 	for i := range s {
 		if last != -1 {
