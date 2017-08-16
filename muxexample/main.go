@@ -14,6 +14,7 @@ import (
 	"github.com/miekg/dns"
 	dnsMux "github.com/vegertar/mux/dns"
 	httpMux "github.com/vegertar/mux/http"
+	"strconv"
 )
 
 var (
@@ -66,6 +67,32 @@ func main() {
 		}
 		httpAddr := httpListener.Addr()
 		log.Println("HTTP is listening on", httpAddr)
+
+		_, port, _ := net.SplitHostPort(httpAddr.String())
+		portNo, _ := strconv.Atoi(port)
+
+		srv := new(dns.SRV)
+		srv.Hdr.Name = "_http._tcp.example.com."
+		srv.Hdr.Rrtype = dns.TypeSRV
+		srv.Hdr.Class = dns.ClassINET
+
+		srv.Port = uint16(portNo)
+		srv.Target = "localhost."
+
+		a := new(dns.A)
+		a.Hdr.Name = srv.Target
+		a.Hdr.Rrtype = dns.TypeA
+		a.Hdr.Class = dns.ClassINET
+		a.A = net.ParseIP("127.0.0.1")
+
+		dnsRouter.HandleFunc(dnsMux.Route{
+			Name: "**.example.com.",
+			Type: "SRV",
+		}, func(w dnsMux.ResponseWriter, r *dnsMux.Request) {
+			w.Answer(srv)
+			w.Extra(a)
+			w.WriteMsg(r.Msg)
+		})
 
 		httpServer := &http.Server{
 			Handler: httpRouter,

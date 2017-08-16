@@ -198,9 +198,12 @@ func getVars(route x.Route, label *x.Label) Middleware {
 	return MiddlewareFunc(func(h Handler) Handler {
 		var varsValue VarsValue
 
-		nameKey := label.Node.Up().Node.Up().Key
+		nameKey := label.Key
+		if label.Node != nil {
+			nameKey = label.Node.Up().Node.Up().Key
+		}
 		varsValue.Name = append(varsValue.Name, nameKey.StringWith("."))
-		for _, k := range nameKey.Capture(route[len(route)-1]) {
+		for _, k := range nameKey.Capture(route[0]) {
 			varsValue.Name = append(varsValue.Name, k.StringWith("."))
 		}
 
