@@ -189,3 +189,33 @@ func TestRouter_ServeDNS(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkMux(b *testing.B) {
+	router := NewRouter()
+	handler := func(w ResponseWriter, r *Request) {}
+	router.HandleFunc(Route{}, handler)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("any", dns.TypeA)
+	request := &Request{Msg: msg}
+	w := &responseWriter{}
+	for i := 0; i < b.N; i++ {
+		router.ServeDNS(w, request)
+	}
+}
+
+func BenchmarkParallelMux(b *testing.B) {
+	router := NewRouter()
+	handler := func(w ResponseWriter, r *Request) {}
+	router.HandleFunc(Route{}, handler)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			msg := new(dns.Msg)
+			msg.SetQuestion("any", dns.TypeA)
+			request := &Request{Msg: msg}
+			w := &responseWriter{}
+			router.ServeDNS(w, request)
+		}
+	})
+}

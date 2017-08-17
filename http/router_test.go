@@ -52,7 +52,9 @@ func TestRouter_HandleFuncParallel(t *testing.T) {
 func TestRouter_UseFunc(t *testing.T) {
 	router := NewRouter()
 	for i := 0; i < 2; i++ {
-		closer, err := router.UseFunc(Route{}, func(h http.Handler) http.Handler { return h })
+		closer, err := router.UseFunc(Route{}, func(h http.Handler) http.Handler {
+			return h
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +67,9 @@ func TestRouter_UseFuncParallel(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
-			closer, err := router.UseFunc(Route{}, func(h http.Handler) http.Handler { return h })
+			closer, err := router.UseFunc(Route{}, func(h http.Handler) http.Handler {
+				return h
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -257,10 +261,10 @@ func TestRouter_ServeHTTP(t *testing.T) {
 		y := w.Header()["Y"]
 		z := w.Header()["Z"]
 		if !reflect.DeepEqual(y, c.y) {
-			t.Errorf("bad case %d for y: expected %v, got %v", i+1, c.y, y)
+			t.Errorf("bad case %d for y: expected %v, got %v", i + 1, c.y, y)
 		}
 		if !reflect.DeepEqual(z, c.z) {
-			t.Errorf("bad case %d for z: expected %v, got %v", i+1, c.z, z)
+			t.Errorf("bad case %d for z: expected %v, got %v", i + 1, c.z, z)
 		}
 	}
 }
@@ -285,6 +289,19 @@ func BenchmarkMux(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		router.ServeHTTP(nil, request)
 	}
+}
+
+func BenchmarkParallelMux(b *testing.B) {
+	router := NewRouter()
+	handler := func(w http.ResponseWriter, r *http.Request) {}
+	router.HandleFunc(Route{}, handler)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			request, _ := http.NewRequest("GET", "/v1/anything", nil)
+			router.ServeHTTP(nil, request)
+		}
+	})
 }
 
 type headerWriter struct {
