@@ -4,6 +4,7 @@ package http
 import (
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/vegertar/mux/x"
 )
@@ -112,6 +113,14 @@ func (p *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.Host = req.Host
 	}
 	r.Path = req.URL.Path
+
+	switch strings.ToLower(req.Header.Get("Upgrade")) {
+	case "websocket":
+		if strings.ToLower(req.Header.Get("Connection")) == "upgrade" {
+			// the incoming request should be websocket
+			r.Scheme = "ws"
+		}
+	}
 
 	p.Match(r).ServeHTTP(w, req)
 }
