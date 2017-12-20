@@ -2,56 +2,18 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/vegertar/mux/x"
 )
-
-// ErrResponseWritten resulted from writting a written response.
-var ErrResponseWritten = errors.New("response has been written")
-
-// ResponseWriter implements the `http.ResponseWriter` interface and can check if HTTP response is written.
-type ResponseWriter struct {
-	http.ResponseWriter
-	written int32
-}
-
-// Write implements the `http.ResponseWriter` interface.
-func (p *ResponseWriter) Write(b []byte) (int, error) {
-	defer atomic.CompareAndSwapInt32(&p.written, 0, 1)
-	return p.ResponseWriter.Write(b)
-}
-
-// WriteHeader implements the `http.ResponseWriter` interface.
-func (p *ResponseWriter) WriteHeader(code int) {
-	defer atomic.CompareAndSwapInt32(&p.written, 0, 1)
-	p.ResponseWriter.WriteHeader(code)
-}
-
-// Written returns if the HTTP response is occured.
-func (p *ResponseWriter) Written() bool {
-	return atomic.LoadInt32(&p.written) == 1
-}
 
 // MultiHandler is a wrapper of multiple HTTP handlers.
 type MultiHandler []http.Handler
 
 // ServeHTTP implements the `http.Handler` interface.
 func (m MultiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	writer, ok := w.(*ResponseWriter)
-	if !ok {
-		writer = &ResponseWriter{
-			ResponseWriter: w,
-		}
-	}
-
 	for _, h := range m {
-		if writer.Written() {
-			break
-		}
-		h.ServeHTTP(writer, r)
+		h.ServeHTTP(w, r)
 	}
 }
 
@@ -147,6 +109,12 @@ type (
 
 const (
 	varsKey contextKey = iota
+
+	// RouterContextKey is a context key. It can be used in HTTP
+	// handlers with context.WithValue to access the router that
+	// routine the handler. The associated value will be of
+	// type *Router.
+	RouterContextKey
 )
 
 var (

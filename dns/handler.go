@@ -233,6 +233,12 @@ type (
 
 const (
 	varsKey contextKey = iota
+
+	// RouterContextKey is a context key. It can be used in DNS
+	// handlers with context.WithValue to access the router that
+	// routine the handler. The associated value will be of
+	// type *Router.
+	RouterContextKey
 )
 
 // ErrorHandler responses a given code to client.

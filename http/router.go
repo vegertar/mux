@@ -2,6 +2,7 @@
 package http
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
@@ -122,5 +123,6 @@ func (p *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	p.Match(r).ServeHTTP(w, req)
+	ctx := context.WithValue(req.Context(), RouterContextKey, p)
+	p.Match(r).ServeHTTP(w, req.WithContext(ctx))
 }

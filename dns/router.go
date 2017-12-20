@@ -112,7 +112,8 @@ func (p *Router) ServeDNS(w ResponseWriter, req *Request) {
 		h = p.Match(r)
 	}
 
-	h.ServeDNS(w, req)
+	ctx := context.WithValue(req.Context(), RouterContextKey, p)
+	h.ServeDNS(w, req.WithContext(ctx))
 }
 
 // ServeFunc returns a `dns.HandlerFunc`.
