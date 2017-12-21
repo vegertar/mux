@@ -9,12 +9,12 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 
 	"github.com/miekg/dns"
 	dnsMux "github.com/vegertar/mux/dns"
 	httpMux "github.com/vegertar/mux/http"
-	"strconv"
 )
 
 var (
@@ -90,8 +90,13 @@ func main() {
 			Type: "SRV",
 		}, func(w dnsMux.ResponseWriter, r *dnsMux.Request) {
 			w.Answer(srv)
-			w.Extra(a)
-			w.WriteMsg(r.Msg)
+		})
+
+		dnsRouter.HandleFunc(dnsMux.Route{
+			Name: srv.Target,
+			Type: "A",
+		}, func(w dnsMux.ResponseWriter, r *dnsMux.Request) {
+			w.Answer(a)
 		})
 
 		httpServer := &http.Server{

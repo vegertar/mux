@@ -39,6 +39,8 @@ func (p *Node) Match(route x.Route) (leaves []*x.Label) {
 						middleware = p.glueMiddleware(false)
 					case "SOA":
 						middleware = p.soaMiddleware(false)
+					case "SRV":
+						middleware = p.srvMiddleware()
 					default:
 						middleware = p.cnameMiddleware(qtype)
 					}
@@ -266,6 +268,55 @@ func (p *Node) glueMiddleware(delegated bool) Middleware {
 			nsWriter.Extra(glueWriter.msg.Answer...)
 			nsWriter.WriteMsg(req.Msg)
 			w.WriteMsg(&nsWriter.msg)
+		})
+	})
+}
+
+func (p *Node) srvMiddleware() Middleware {
+	if p.Up() != nil {
+		panic("required root")
+	}
+
+	return MiddlewareFunc(func(h Handler) Handler {
+		return HandlerFunc(func(w ResponseWriter, req *Request) {
+			srvWriter := &responseWriter{}
+			h.ServeDNS(srvWriter, req)
+
+			if len(srvWriter.msg.Extra) == 0 {
+				extraWriter := &responseWriter{}
+				extraQuestion := &Request{Msg: new(dns.Msg)}
+
+				for _, rr := range srvWriter.msg.Answer {
+					srv, ok := rr.(*dns.SRV)
+					if !ok {
+						continue
+					}
+
+					r := Route{Name: srv.Target}
+					r.UseLiteral = true
+
+					extraQuestion.SetQuestion(srv.Target, dns.TypeA)
+					r.Type = "A"
+					route, err := newRoute(r)
+					if err != nil {
+						panic(err)
+					}
+					newHandlerFromLabels(route, p.Match(route)).ServeDNS(extraWriter, extraQuestion)
+
+					extraQuestion.SetQuestion(srv.Target, dns.TypeAAAA)
+					r.Type = "AAAA"
+					route, err = newRoute(r)
+					if err != nil {
+						panic(err)
+					}
+					newHandlerFromLabels(route, p.Match(route)).ServeDNS(extraWriter, extraQuestion)
+				}
+
+				srvWriter.Extra(extraWriter.msg.Answer...)
+			}
+
+			srvWriter.WriteMsg(req.Msg)
+			w.WriteMsg(&srvWriter.msg)
 		})
 	})
 }
