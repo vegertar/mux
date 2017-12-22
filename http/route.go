@@ -20,11 +20,11 @@ var (
 
 // Route is the HTTP route component configure.
 type Route struct {
-	Scheme     string `json:"scheme,omitempty" default:"*"`
-	Method     string `json:"method,omitempty" default:"*"`
-	Host       string `json:"host,omitempty" default:"**"`
-	Path       string `json:"path,omitempty" default:"**"`
-	UseLiteral bool   `json:"useLiteral,omitempty"`
+	Scheme     string
+	Method     string
+	Host       string
+	Path       string
+	UseLiteral bool
 }
 
 // String returns the string representation.

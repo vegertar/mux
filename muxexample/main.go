@@ -38,24 +38,42 @@ func main() {
 		if dnsAddr == "" {
 			dnsAddr = ":53"
 		}
-		dnsListener, err := net.ListenPacket("udp", dnsAddr)
+		dnsPacketConn, err := net.ListenPacket("udp", dnsAddr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Println("DNS is listening on", dnsListener.LocalAddr())
+		realAddr := dnsPacketConn.LocalAddr().String()
 
-		dnsServer := &dns.Server{
-			PacketConn: dnsListener,
+		dnsListner, err := net.Listen("tcp", realAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("DNS is listening on", realAddr)
+
+		dnsTCPServer := &dns.Server{
+			Listener: dnsListner,
+			Handler:  dnsRouter.ServeFunc(ctx),
+		}
+
+		dnsUDPServer := &dns.Server{
+			PacketConn: dnsPacketConn,
 			Handler:    dnsRouter.ServeFunc(ctx),
 		}
 
-		wg.Add(1)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			<-ctx.Done()
-			dnsServer.Shutdown()
+			dnsTCPServer.Shutdown()
 		}()
-		go dnsServer.ActivateAndServe()
+		go dnsTCPServer.ActivateAndServe()
+
+		go func() {
+			defer wg.Done()
+			<-ctx.Done()
+			dnsUDPServer.Shutdown()
+		}()
+		go dnsUDPServer.ActivateAndServe()
 	}
 
 	{

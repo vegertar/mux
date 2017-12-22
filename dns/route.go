@@ -21,15 +21,15 @@ var (
 
 // Route is the DNS route component configure.
 type Route struct {
-	Name       string `json:"name,omitempty" default:"**"`
-	Type       string `json:"type,omitempty" default:"A"`
-	Class      string `json:"class,omitempty" default:"IN"`
-	UseLiteral bool   `json:"useLiteral,omitempty"`
+	Name       string
+	Type       string
+	Class      string
+	UseLiteral bool
 }
 
 // String returns the string representation.
 func (r Route) String() string {
-	name, typ, class := wildcards, "A", "IN"
+	name, typ, class := wildcards, wildcards, wildcards
 	if len(r.Name) > 0 {
 		name = strings.ToLower(r.Name)
 	}
