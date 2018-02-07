@@ -2,7 +2,7 @@
 
 Mux implements a dynamic DNS/HTTP router which can be safely adding or deleting handlers at any time.
 
-*This package is still under development.*
+*This project is STOPPED develop, instead I prefer julienschmidt's [HttpRouter](https://github.com/julienschmidt/httprouter) for HTTP mux. For DNS mux, I've worked on [DnsRouter](https://github.com/vegertar/dnsrouter)*
 
 ## Install
 
